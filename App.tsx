@@ -1,16 +1,28 @@
+
 import React, { useState, useEffect, useRef } from 'react';
-import { AppData, Project, TimerMode, AppSessionLog } from './types';
-import { getIstanbulDate, generateId, calculateProjectStats, formatTime } from './utils';
+import { AppData, Project, TimerMode, AppSessionLog, AppSettings } from './types';
+import { getIstanbulDate, generateId, calculateProjectStats, formatTime, hexToRgba } from './utils';
 import { Button } from './components/Button';
 import { Modal } from './components/Modal';
 import { AppSessionTimer } from './components/AppSessionTimer';
 import { PerformanceGraph } from './components/PerformanceGraph';
 import { Trash2, Plus, Play, Pause, SkipForward, Menu, Download, Upload, Clock, CheckCircle, MoreVertical, Settings, Target, BarChart3, X } from 'lucide-react';
 
-// --- Constants ---
-const POMODORO_TIME = 25 * 60;
-const SHORT_BREAK_TIME = 5 * 60;
-const LONG_BREAK_TIME = 15 * 60;
+// --- Default Constants ---
+const DEFAULT_SETTINGS: AppSettings = {
+  durations: {
+    pomodoro: 25,
+    shortBreak: 5,
+    longBreak: 15
+  },
+  colors: {
+    pomodoro: '#f43f5e', // rose-500
+    shortBreak: '#14b8a6', // teal-500
+    longBreak: '#3b82f6'  // blue-500
+  },
+  autoStartBreaks: false,
+  autoStartPomodoros: false
+};
 
 // --- Main Component ---
 const App: React.FC = () => {
@@ -19,10 +31,14 @@ const App: React.FC = () => {
   const [appHistory, setAppHistory] = useState<AppSessionLog[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [activeSubtaskId, setActiveSubtaskId] = useState<string | null>(null);
+  
+  // --- Settings State ---
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
   // --- Timer State ---
   const [timerMode, setTimerMode] = useState<TimerMode>(TimerMode.POMODORO);
-  const [timeLeft, setTimeLeft] = useState(POMODORO_TIME);
+  const [timeLeft, setTimeLeft] = useState(DEFAULT_SETTINGS.durations.pomodoro * 60);
   const [isActive, setIsActive] = useState(false);
   const [pomoCount, setPomoCount] = useState(0); 
   
@@ -51,6 +67,15 @@ const App: React.FC = () => {
     audioRef.current = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg');
   }, []);
 
+  // Update timeLeft when settings duration changes (and timer is not active)
+  useEffect(() => {
+    if (!isActive) {
+      if (timerMode === TimerMode.POMODORO) setTimeLeft(settings.durations.pomodoro * 60);
+      else if (timerMode === TimerMode.SHORT_BREAK) setTimeLeft(settings.durations.shortBreak * 60);
+      else if (timerMode === TimerMode.LONG_BREAK) setTimeLeft(settings.durations.longBreak * 60);
+    }
+  }, [settings.durations, timerMode, isActive]);
+
   const requestNotificationPermission = () => {
     if ('Notification' in window && Notification.permission !== 'granted') {
       Notification.requestPermission();
@@ -68,14 +93,13 @@ const App: React.FC = () => {
 
   // --- Timer Logic ---
   useEffect(() => {
-    // Correctly typing interval for browser environment to avoid "Cannot find namespace 'NodeJS'" error
     let interval: ReturnType<typeof setInterval>;
 
     if (isActive && timeLeft > 0) {
       interval = setInterval(() => {
         setTimeLeft((prev) => prev - 1);
       }, 1000);
-    } else if (timeLeft === 0) {
+    } else if (timeLeft === 0 && isActive) {
       handleTimerComplete();
     }
 
@@ -101,20 +125,34 @@ const App: React.FC = () => {
       }
 
       // Determine next break
+      let nextMode = TimerMode.SHORT_BREAK;
+      let nextTime = settings.durations.shortBreak * 60;
+      let title = "Time for a break!";
+      let body = "Take 5 minutes to stretch.";
+
       if (nextPomoCount % 4 === 0) {
-        setTimerMode(TimerMode.LONG_BREAK);
-        setTimeLeft(LONG_BREAK_TIME);
-        sendNotification("Time for a break!", "Great job! Take a long 15 minute rest.");
-      } else {
-        setTimerMode(TimerMode.SHORT_BREAK);
-        setTimeLeft(SHORT_BREAK_TIME);
-        sendNotification("Time for a break!", "Take 5 minutes to stretch.");
+        nextMode = TimerMode.LONG_BREAK;
+        nextTime = settings.durations.longBreak * 60;
+        body = "Great job! Take a long 15 minute rest.";
       }
+
+      setTimerMode(nextMode);
+      setTimeLeft(nextTime);
+      sendNotification(title, body);
+
+      if (settings.autoStartBreaks) {
+        setIsActive(true);
+      }
+
     } else {
       // Break is over
       setTimerMode(TimerMode.POMODORO);
-      setTimeLeft(POMODORO_TIME);
+      setTimeLeft(settings.durations.pomodoro * 60);
       sendNotification("Time to focus!", "Break is over. Let's get back to work.");
+
+      if (settings.autoStartPomodoros) {
+        setIsActive(true);
+      }
     }
   };
 
@@ -237,7 +275,8 @@ const App: React.FC = () => {
 
     const dataToExport: AppData = {
       projects,
-      appHistory: [...appHistory, currentSessionLog]
+      appHistory: [...appHistory, currentSessionLog],
+      settings
     };
 
     const blob = new Blob([JSON.stringify(dataToExport, null, 2)], { type: 'application/json' });
@@ -261,7 +300,6 @@ const App: React.FC = () => {
         
         if (json.projects) {
           setProjects(json.projects);
-          // If the currently selected project doesn't exist in the new data, deselect it to avoid visual bugs
           if (selectedProjectId && !json.projects.find(p => p.id === selectedProjectId)) {
             setSelectedProjectId(null);
             setActiveSubtaskId(null);
@@ -269,13 +307,12 @@ const App: React.FC = () => {
         }
         
         if (json.appHistory) setAppHistory(json.appHistory);
+        if (json.settings) setSettings(json.settings);
         
-        // Success feedback
         console.log("Data imported successfully");
       } catch (err) {
         alert('Failed to parse JSON file.');
       } finally {
-        // Reset file input so the same file can be selected again
         if (fileInputRef.current) {
           fileInputRef.current.value = '';
         }
@@ -284,35 +321,16 @@ const App: React.FC = () => {
     reader.readAsText(file);
   };
 
-  // --- Styling Helpers ---
-  const getThemeColors = () => {
-    switch (timerMode) {
-      case TimerMode.POMODORO:
-        return 'bg-rose-500';
-      case TimerMode.SHORT_BREAK:
-        return 'bg-teal-500'; // Turquoise-ish
-      case TimerMode.LONG_BREAK:
-        return 'bg-blue-500';
-      default:
-        return 'bg-rose-500';
-    }
-  };
-  
-  const getButtonTextClass = () => {
-     switch(timerMode) {
-      case TimerMode.POMODORO: return 'text-rose-500';
-      case TimerMode.SHORT_BREAK: return 'text-teal-500';
-      case TimerMode.LONG_BREAK: return 'text-blue-500';
-      default: return 'text-rose-500';
-    }
-  };
-
+  const activeColor = settings.colors[timerMode];
   const selectedProject = projects.find(p => p.id === selectedProjectId);
   const selectedProjectStats = selectedProject ? calculateProjectStats(selectedProject.subtasks) : null;
   const activeSubtask = selectedProject?.subtasks.find(t => t.id === activeSubtaskId);
 
   return (
-    <div className={`min-h-screen transition-colors duration-500 ease-in-out ${getThemeColors()} font-sans flex flex-col md:flex-row text-white overflow-hidden`}>
+    <div 
+      className="min-h-screen transition-colors duration-500 ease-in-out font-sans flex flex-col md:flex-row text-white overflow-hidden"
+      style={{ backgroundColor: activeColor }}
+    >
       
       {/* Sidebar */}
       <div className={`
@@ -370,6 +388,9 @@ const App: React.FC = () => {
           </div>
 
           <div className="mt-6 pt-6 border-t border-white/10 space-y-2">
+             <button onClick={() => setIsSettingsModalOpen(true)} className="w-full flex items-center gap-3 px-4 py-2 rounded hover:bg-white/10 transition-colors text-sm">
+                <Settings className="w-4 h-4" /> Settings
+             </button>
              <button onClick={() => setIsPerformanceModalOpen(true)} className="w-full flex items-center gap-3 px-4 py-2 rounded hover:bg-white/10 transition-colors text-sm">
                 <BarChart3 className="w-4 h-4" /> Performance
              </button>
@@ -408,7 +429,13 @@ const App: React.FC = () => {
                {[TimerMode.POMODORO, TimerMode.SHORT_BREAK, TimerMode.LONG_BREAK].map(mode => (
                  <button
                    key={mode}
-                   onClick={() => { setIsActive(false); setTimerMode(mode); setTimeLeft(mode === TimerMode.POMODORO ? POMODORO_TIME : mode === TimerMode.SHORT_BREAK ? SHORT_BREAK_TIME : LONG_BREAK_TIME); }}
+                   onClick={() => { 
+                     setIsActive(false); 
+                     setTimerMode(mode); 
+                     if (mode === TimerMode.POMODORO) setTimeLeft(settings.durations.pomodoro * 60);
+                     else if (mode === TimerMode.SHORT_BREAK) setTimeLeft(settings.durations.shortBreak * 60);
+                     else setTimeLeft(settings.durations.longBreak * 60);
+                   }}
                    className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${timerMode === mode ? 'bg-white/20 font-bold shadow-sm' : 'hover:bg-white/10 text-white/70'}`}
                  >
                    {mode === TimerMode.POMODORO ? 'Pomodoro' : mode === TimerMode.SHORT_BREAK ? 'Short Break' : 'Long Break'}
@@ -423,7 +450,8 @@ const App: React.FC = () => {
             <div className="flex items-center justify-center gap-6">
                <button 
                   onClick={toggleTimer}
-                  className={`h-16 px-8 bg-white rounded-2xl text-2xl font-bold uppercase tracking-widest transition-transform active:scale-95 shadow-lg ${getButtonTextClass()}`}
+                  className="h-16 px-8 bg-white rounded-2xl text-2xl font-bold uppercase tracking-widest transition-transform active:scale-95 shadow-lg"
+                  style={{ color: activeColor }}
                >
                  {isActive ? 'Pause' : 'Start'}
                </button>
@@ -476,10 +504,14 @@ const App: React.FC = () => {
                         relative p-4 rounded-xl border-l-8 cursor-pointer transition-all hover:brightness-110
                         ${isCompleted 
                           ? 'bg-emerald-600/30 border-emerald-400' 
-                          : 'bg-rose-500/20 border-rose-300'
+                          : 'border-rose-300' // Base class, dynamic bg below
                         }
                         ${isActiveTask ? 'ring-2 ring-white ring-offset-2 ring-offset-transparent transform scale-[1.02] shadow-xl' : ''}
                       `}
+                      style={!isCompleted ? { 
+                        backgroundColor: hexToRgba(settings.colors.pomodoro, 0.2), 
+                        borderColor: hexToRgba(settings.colors.pomodoro, 0.5) 
+                      } : {}}
                     >
                        <div className="flex justify-between items-center">
                           <div className="flex-1">
@@ -532,6 +564,111 @@ const App: React.FC = () => {
 
       {/* Global App Timer */}
       <AppSessionTimer onUpdate={(time) => currentSessionDuration.current = time} />
+
+      {/* Settings Modal */}
+      <Modal isOpen={isSettingsModalOpen} onClose={() => setIsSettingsModalOpen(false)} title="Settings">
+        <div className="space-y-6 text-gray-800">
+           
+           {/* Timer Settings */}
+           <div>
+             <h3 className="text-gray-400 uppercase text-xs font-bold tracking-wider mb-3">Timer (minutes)</h3>
+             <div className="grid grid-cols-3 gap-4">
+               <div>
+                 <label className="block text-sm text-gray-500 mb-1">Pomodoro</label>
+                 <input 
+                   type="number" 
+                   value={settings.durations.pomodoro}
+                   onChange={(e) => setSettings({...settings, durations: {...settings.durations, pomodoro: parseInt(e.target.value) || 25}})}
+                   className="w-full bg-gray-100 border-none rounded px-3 py-2 text-gray-800"
+                 />
+               </div>
+               <div>
+                 <label className="block text-sm text-gray-500 mb-1">Short Break</label>
+                 <input 
+                   type="number" 
+                   value={settings.durations.shortBreak}
+                   onChange={(e) => setSettings({...settings, durations: {...settings.durations, shortBreak: parseInt(e.target.value) || 5}})}
+                   className="w-full bg-gray-100 border-none rounded px-3 py-2 text-gray-800"
+                 />
+               </div>
+               <div>
+                 <label className="block text-sm text-gray-500 mb-1">Long Break</label>
+                 <input 
+                   type="number" 
+                   value={settings.durations.longBreak}
+                   onChange={(e) => setSettings({...settings, durations: {...settings.durations, longBreak: parseInt(e.target.value) || 15}})}
+                   className="w-full bg-gray-100 border-none rounded px-3 py-2 text-gray-800"
+                 />
+               </div>
+             </div>
+           </div>
+
+           {/* Theme Settings */}
+           <div>
+             <h3 className="text-gray-400 uppercase text-xs font-bold tracking-wider mb-3">Theme Colors</h3>
+             <div className="grid grid-cols-3 gap-4">
+               <div>
+                 <label className="block text-sm text-gray-500 mb-1">Pomodoro</label>
+                 <div className="flex gap-2 items-center bg-gray-100 rounded p-2">
+                   <input 
+                     type="color" 
+                     value={settings.colors.pomodoro}
+                     onChange={(e) => setSettings({...settings, colors: {...settings.colors, pomodoro: e.target.value}})}
+                     className="w-8 h-8 rounded cursor-pointer border-none bg-transparent p-0"
+                   />
+                 </div>
+               </div>
+               <div>
+                 <label className="block text-sm text-gray-500 mb-1">Short Break</label>
+                 <div className="flex gap-2 items-center bg-gray-100 rounded p-2">
+                   <input 
+                     type="color" 
+                     value={settings.colors.shortBreak}
+                     onChange={(e) => setSettings({...settings, colors: {...settings.colors, shortBreak: e.target.value}})}
+                     className="w-8 h-8 rounded cursor-pointer border-none bg-transparent p-0"
+                   />
+                 </div>
+               </div>
+               <div>
+                 <label className="block text-sm text-gray-500 mb-1">Long Break</label>
+                 <div className="flex gap-2 items-center bg-gray-100 rounded p-2">
+                   <input 
+                     type="color" 
+                     value={settings.colors.longBreak}
+                     onChange={(e) => setSettings({...settings, colors: {...settings.colors, longBreak: e.target.value}})}
+                     className="w-8 h-8 rounded cursor-pointer border-none bg-transparent p-0"
+                   />
+                 </div>
+               </div>
+             </div>
+           </div>
+
+           {/* Toggles */}
+           <div>
+              <h3 className="text-gray-400 uppercase text-xs font-bold tracking-wider mb-3">Preferences</h3>
+              <div className="space-y-3">
+                 <div className="flex justify-between items-center">
+                    <span className="text-gray-700">Auto-start Breaks</span>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input type="checkbox" checked={settings.autoStartBreaks} onChange={(e) => setSettings({...settings, autoStartBreaks: e.target.checked})} className="sr-only peer" />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                    </label>
+                 </div>
+                 <div className="flex justify-between items-center">
+                    <span className="text-gray-700">Auto-start Pomodoros</span>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input type="checkbox" checked={settings.autoStartPomodoros} onChange={(e) => setSettings({...settings, autoStartPomodoros: e.target.checked})} className="sr-only peer" />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                    </label>
+                 </div>
+              </div>
+           </div>
+
+           <div className="flex justify-end pt-4 border-t">
+             <Button onClick={() => setIsSettingsModalOpen(false)}>OK</Button>
+           </div>
+        </div>
+      </Modal>
 
       {/* Add Project Modal */}
       <Modal isOpen={isAddProjectModalOpen} onClose={() => setIsAddProjectModalOpen(false)} title="Create New Project">

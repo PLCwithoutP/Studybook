@@ -1,3 +1,4 @@
+
 export interface Subtask {
   id: string;
   name: string;
@@ -17,9 +18,25 @@ export interface AppSessionLog {
   duration: string; // Format hh:mm:ss
 }
 
+export interface AppSettings {
+  durations: {
+    pomodoro: number;
+    shortBreak: number;
+    longBreak: number;
+  };
+  colors: {
+    pomodoro: string;
+    shortBreak: string;
+    longBreak: string;
+  };
+  autoStartBreaks: boolean;
+  autoStartPomodoros: boolean;
+}
+
 export interface AppData {
   projects: Project[];
   appHistory: AppSessionLog[];
+  settings?: AppSettings;
 }
 
 export enum TimerMode {

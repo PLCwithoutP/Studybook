@@ -1,3 +1,4 @@
+
 export const formatTime = (seconds: number): string => {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
@@ -41,4 +42,14 @@ export const calculateProjectStats = (subtasks: any[]) => {
     timeSpent: formatTime(timeSpentSeconds),
     timeRemaining: formatTime(timeRemainingSeconds),
   };
+};
+
+export const hexToRgba = (hex: string, alpha: number): string => {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  
+  if (isNaN(r) || isNaN(g) || isNaN(b)) return `rgba(0,0,0,${alpha})`;
+  
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 };
