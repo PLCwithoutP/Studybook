@@ -352,7 +352,7 @@ const App: React.FC = () => {
         <div className="p-6 flex flex-col h-full">
           <div className="flex justify-between items-center mb-6">
              <h1 className="text-2xl font-bold flex items-center gap-2 select-none">
-                <CheckCircle className="w-6 h-6" /> Pomofocus
+                <CheckCircle className="w-6 h-6" /> Studybook
              </h1>
              <button onClick={() => setIsSidebarOpen(false)} className="md:hidden">
                <Menu className="w-6 h-6" />
