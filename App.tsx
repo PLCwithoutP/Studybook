@@ -338,6 +338,19 @@ const App: React.FC = () => {
   const selectedProjectStats = selectedProject ? calculateProjectStats(selectedProject.subtasks) : null;
   const activeSubtask = selectedProject?.subtasks.find(t => t.id === activeSubtaskId);
 
+  // Calculate Progress for the visual bar
+  const getTotalDurationForMode = () => {
+    switch (timerMode) {
+      case TimerMode.SHORT_BREAK: return settings.durations.shortBreak * 60;
+      case TimerMode.LONG_BREAK: return settings.durations.longBreak * 60;
+      case TimerMode.POMODORO:
+      default: return settings.durations.pomodoro * 60;
+    }
+  };
+  
+  const totalDuration = getTotalDurationForMode();
+  const progressPercentage = Math.min(100, Math.max(0, (timeLeft / totalDuration) * 100));
+
   return (
     <div 
       className="min-h-screen transition-colors duration-500 ease-in-out font-sans flex flex-col md:flex-row text-white overflow-hidden"
@@ -430,9 +443,17 @@ const App: React.FC = () => {
         <div className="max-w-4xl mx-auto w-full p-4 md:p-8 flex flex-col items-center">
           
           {/* Header Info */}
-          <div className="text-center mb-8 animate-fade-in mt-12 md:mt-0">
+          <div className="text-center mb-8 animate-fade-in mt-12 md:mt-0 w-full max-w-md">
             <h2 className="text-3xl font-bold mb-2">Welcome Back, Furkan</h2>
-            <p className="text-white/80 text-lg opacity-90">{getIstanbulDate()}</p>
+            <p className="text-white/80 text-lg opacity-90 mb-4">{getIstanbulDate()}</p>
+            
+            {/* Session Progress Bar */}
+            <div className="w-full h-2 bg-white/20 rounded-full overflow-hidden backdrop-blur-sm">
+              <div 
+                className="h-full bg-white transition-all duration-1000 ease-linear shadow-[0_0_10px_rgba(255,255,255,0.5)]"
+                style={{ width: `${progressPercentage}%` }}
+              ></div>
+            </div>
           </div>
 
           {/* Timer Card */}
