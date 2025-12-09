@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { AppData, Project, TimerMode, AppSessionLog, AppSettings } from './types';
 import { getIstanbulDate, generateId, calculateProjectStats, formatTime, hexToRgba } from './utils';
 import { Button } from './components/Button';
@@ -41,6 +41,7 @@ const App: React.FC = () => {
   const [timeLeft, setTimeLeft] = useState(DEFAULT_SETTINGS.durations.pomodoro * 60);
   const [isActive, setIsActive] = useState(false);
   const [pomoCount, setPomoCount] = useState(0); 
+  const [now, setNow] = useState<Date>(new Date());
   
   // --- UI State ---
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -75,6 +76,12 @@ const App: React.FC = () => {
       else if (timerMode === TimerMode.LONG_BREAK) setTimeLeft(settings.durations.longBreak * 60);
     }
   }, [settings.durations, timerMode, isActive]);
+
+  // Update current time for UI
+  useEffect(() => {
+    const interval = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   const requestNotificationPermission = () => {
     if ('Notification' in window && Notification.permission !== 'granted') {
@@ -291,7 +298,7 @@ const App: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `pomodoro_backup_${Date.now()}.json`;
+    link.download = `studybook_backup_${Date.now()}.json`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -357,12 +364,55 @@ const App: React.FC = () => {
   const totalDuration = getTotalDurationForMode();
   const progressPercentage = Math.min(100, Math.max(0, (timeLeft / totalDuration) * 100));
 
+  // --- Right Side Project Bar Calculation ---
+  const projectBarSegments = useMemo(() => {
+    if (!selectedProject) return [];
+    
+    const segments: string[] = [];
+    
+    selectedProject.subtasks.forEach(task => {
+      const isTaskActive = task.id === activeSubtaskId;
+      
+      for (let i = 0; i < task.targetSessions; i++) {
+        let colorClass = '';
+        
+        // 1. Completed sessions
+        if (i < task.completedSessions) {
+          colorClass = 'bg-teal-800'; // Dark Teal
+        } 
+        // 2. Remaining sessions in active subtask
+        else if (isTaskActive) {
+          colorClass = 'bg-yellow-400'; // Yellow
+        } 
+        // 3. Remaining sessions in non-active/unfinished subtask
+        else {
+          colorClass = 'bg-red-900'; // Dark Red
+        }
+        
+        segments.push(colorClass);
+      }
+    });
+    
+    return segments;
+  }, [selectedProject, activeSubtaskId]);
+
   return (
     <div 
-      className="min-h-screen transition-colors duration-500 ease-in-out font-sans flex flex-col md:flex-row text-white overflow-hidden"
+      className="min-h-screen transition-colors duration-500 ease-in-out font-sans flex flex-col md:flex-row text-white overflow-hidden relative"
       style={{ backgroundColor: activeColor }}
     >
-      
+      {/* Project Progress Bar (Right Side) */}
+      {selectedProject && (
+        <div className="fixed right-0 top-0 bottom-0 w-3 flex flex-col z-40 bg-black/10">
+          {projectBarSegments.map((colorClass, idx) => (
+            <div 
+              key={idx} 
+              className={`w-full flex-1 transition-all duration-300 ${colorClass} border-b border-black/10`} 
+            />
+          ))}
+        </div>
+      )}
+
       {/* Sidebar */}
       <div className={`
         fixed inset-y-0 left-0 z-30 w-80 bg-black/20 backdrop-blur-md border-r border-white/10 transition-transform duration-300 ease-in-out
@@ -437,7 +487,7 @@ const App: React.FC = () => {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col h-screen overflow-y-auto relative bg-transparent">
+      <div className="flex-1 flex flex-col h-screen overflow-y-auto relative bg-transparent pr-4">
         {/* Mobile Header Toggle */}
         <div className="md:hidden p-4 absolute top-0 left-0 z-20">
           <button onClick={() => setIsSidebarOpen(true)} className="p-2 bg-white/20 rounded-md backdrop-blur-sm">
