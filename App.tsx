@@ -5,7 +5,8 @@ import { Button } from './components/Button';
 import { Modal } from './components/Modal';
 import { AppSessionTimer } from './components/AppSessionTimer';
 import { PerformanceGraph } from './components/PerformanceGraph';
-import { Trash2, Plus, Minus, SkipForward, Menu, Download, Upload, CheckCircle, Settings, Target, BarChart3, ArrowLeft, RotateCcw } from 'lucide-react';
+import { CalendarView } from './components/CalendarView';
+import { Trash2, Plus, Minus, SkipForward, Menu, Download, Upload, CheckCircle, Settings, Target, BarChart3, ArrowLeft, RotateCcw, Calendar as CalendarIcon } from 'lucide-react';
 
 const DEFAULT_SETTINGS: AppSettings = {
   durations: {
@@ -37,6 +38,7 @@ const App: React.FC = () => {
   const [isAddProjectModalOpen, setIsAddProjectModalOpen] = useState(false);
   const [isAddSubtaskModalOpen, setIsAddSubtaskModalOpen] = useState(false);
   const [isPerformanceViewOpen, setIsPerformanceViewOpen] = useState(false);
+  const [isCalendarViewOpen, setIsCalendarViewOpen] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
   const [newSubtasks, setNewSubtasks] = useState<{name: string, target: number}[]>([{name: '', target: 1}]);
   const [subtaskToAddName, setSubtaskToAddName] = useState('');
@@ -53,7 +55,6 @@ const App: React.FC = () => {
     audioRef.current = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg');
   }, []);
 
-  // FIXED: Only reset time when timerMode or duration settings change, NOT when pausing/unpausing
   useEffect(() => {
     const durationKey = timerMode === TimerMode.POMODORO ? 'pomodoro' : (timerMode === TimerMode.SHORT_BREAK ? 'shortBreak' : 'longBreak');
     setTimeLeft(settings.durations[durationKey] * 60);
@@ -217,7 +218,7 @@ const App: React.FC = () => {
             {projects.map(project => {
               const stats = calculateProjectStats(project.subtasks);
               return (
-                <div key={project.id} onClick={() => { setSelectedProjectId(project.id); setIsPerformanceViewOpen(false); }} className={`p-4 rounded-lg cursor-pointer transition-all border ${selectedProjectId === project.id ? 'bg-white/20 border-white/40 shadow-lg' : 'bg-white/5 border-transparent hover:bg-white/10'}`}>
+                <div key={project.id} onClick={() => { setSelectedProjectId(project.id); setIsPerformanceViewOpen(false); setIsCalendarViewOpen(false); }} className={`p-4 rounded-lg cursor-pointer transition-all border ${selectedProjectId === project.id ? 'bg-white/20 border-white/40 shadow-lg' : 'bg-white/5 border-transparent hover:bg-white/10'}`}>
                   <div className="flex justify-between items-start mb-2">
                     <h3 className="font-semibold truncate pr-2">{project.name}</h3>
                     <button onClick={(e) => { e.stopPropagation(); if (window.confirm("Delete project?")) setProjects(projects.filter(p => p.id !== project.id)); }} className="text-white/50 hover:text-white p-1"><Trash2 className="w-4 h-4" /></button>
@@ -232,7 +233,8 @@ const App: React.FC = () => {
           </div>
           <div className="mt-6 pt-6 border-t border-white/10 space-y-2">
              <button onClick={() => setIsSettingsModalOpen(true)} className="w-full flex items-center gap-3 px-4 py-2 rounded hover:bg-white/10 transition-colors text-sm"><Settings className="w-4 h-4" /> Settings</button>
-             <button onClick={() => setIsPerformanceViewOpen(true)} className={`w-full flex items-center gap-3 px-4 py-2 rounded transition-colors text-sm ${isPerformanceViewOpen ? 'bg-white/30' : 'hover:bg-white/10'}`}><BarChart3 className="w-4 h-4" /> Performance</button>
+             <button onClick={() => { setIsPerformanceViewOpen(true); setIsCalendarViewOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-2 rounded transition-colors text-sm ${isPerformanceViewOpen ? 'bg-white/30' : 'hover:bg-white/10'}`}><BarChart3 className="w-4 h-4" /> Performance</button>
+             <button onClick={() => { setIsCalendarViewOpen(true); setIsPerformanceViewOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-2 rounded transition-colors text-sm ${isCalendarViewOpen ? 'bg-white/30' : 'hover:bg-white/10'}`}><CalendarIcon className="w-4 h-4" /> Calendar</button>
              <button onClick={handleExport} className="w-full flex items-center gap-3 px-4 py-2 rounded hover:bg-white/10 transition-colors text-sm"><Download className="w-4 h-4" /> Export Data</button>
              <label className="w-full flex items-center gap-3 px-4 py-2 rounded hover:bg-white/10 transition-colors text-sm cursor-pointer"><Upload className="w-4 h-4" /> Import Data<input type="file" ref={fileInputRef} onChange={handleImport} accept=".json" className="hidden" /></label>
           </div>
@@ -254,6 +256,14 @@ const App: React.FC = () => {
               </div>
               <PerformanceGraph data={appHistory} isMainView={true} />
             </div>
+          ) : isCalendarViewOpen ? (
+            <div className="w-full max-w-5xl animate-fade-in-up mt-8 bg-white/10 backdrop-blur-md rounded-3xl p-8 shadow-2xl">
+              <div className="flex items-center justify-between mb-8">
+                <h2 className="text-3xl font-bold flex items-center gap-3"><CalendarIcon className="w-8 h-8" /> Calendar & Timelines</h2>
+                <button onClick={() => setIsCalendarViewOpen(false)} className="flex items-center gap-2 bg-white/20 px-4 py-2 rounded-lg hover:bg-white/30 transition-colors"><ArrowLeft className="w-4 h-4" /> Back to Timer</button>
+              </div>
+              <CalendarView history={appHistory} projects={projects} />
+            </div>
           ) : (
             <>
               <div className="text-center mb-8 animate-fade-in mt-12 md:mt-0 w-full max-w-md">
@@ -272,17 +282,12 @@ const App: React.FC = () => {
                 </div>
                 <div className="text-9xl font-bold text-center font-mono tracking-tight mb-8 drop-shadow-lg select-none">{formatTime(timeLeft)}</div>
                 <div className="flex items-center justify-center gap-6">
-                   {/* RESET BUTTON */}
                    <button onClick={resetTimer} className="p-4 bg-white/20 rounded-2xl hover:bg-white/30 transition-all active:scale-95 group" title="Reset Timer">
                       <RotateCcw className="w-8 h-8 group-hover:rotate-[-45deg] transition-transform" />
                    </button>
-                   
-                   {/* START/PAUSE BUTTON */}
                    <button onClick={toggleTimer} className="h-16 px-10 bg-white rounded-2xl text-2xl font-bold uppercase tracking-widest transition-transform active:scale-95 shadow-lg" style={{ color: activeColor }}>
                      {isActive ? 'Pause' : 'Start'}
                    </button>
-                   
-                   {/* SKIP BUTTON */}
                    <button onClick={skipTimer} className="p-4 bg-white/20 rounded-2xl hover:bg-white/30 transition-all active:scale-95" title="Skip Session">
                       <SkipForward className="w-8 h-8" />
                    </button>
