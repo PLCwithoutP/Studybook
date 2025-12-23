@@ -57,17 +57,6 @@ export const GanttTimeline: React.FC<GanttTimelineProps> = ({ projects, settings
   }, [projects, dailyTarget]);
 
   const exportToODS = () => {
-    // Attempt to find the correct XLSX utilities regardless of how it was imported
-    const xlsxLib: any = XLSX;
-    const utils = xlsxLib.utils || xlsxLib.default?.utils;
-    const writeFile = xlsxLib.writeFile || xlsxLib.default?.writeFile;
-
-    if (!utils || !writeFile) {
-      console.error("XLSX library utilities not found.");
-      alert("Spreadsheet library is not ready. Please wait a moment and try again.");
-      return;
-    }
-
     const data: any[] = [];
     
     // Header row
@@ -130,15 +119,15 @@ export const GanttTimeline: React.FC<GanttTimelineProps> = ({ projects, settings
     });
 
     try {
-      const worksheet = utils.aoa_to_sheet(data);
-      const workbook = utils.book_new();
-      utils.book_append_sheet(workbook, worksheet, "Gantt Timeline");
+      const worksheet = XLSX.utils.aoa_to_sheet(data);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Gantt Timeline");
       
       // Generate .ods file
-      writeFile(workbook, `Studybook_Gantt_${new Date().toISOString().split('T')[0]}.ods`);
+      XLSX.writeFile(workbook, `Studybook_Gantt_${new Date().toISOString().split('T')[0]}.ods`);
     } catch (err) {
       console.error("Export to ODS failed", err);
-      alert("Failed to generate ODS file.");
+      alert("Failed to generate ODS file. Make sure the library is installed.");
     }
   };
 
