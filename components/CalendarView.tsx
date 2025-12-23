@@ -10,7 +10,7 @@ interface CalendarViewProps {
   settings: AppSettings;
 }
 
-type Tab = 'monthly' | 'gantt';
+type Tab = 'monthly' | 'progress';
 
 export const CalendarView: React.FC<CalendarViewProps> = ({ history, projects, settings }) => {
   const [activeTab, setActiveTab] = useState<Tab>('monthly');
@@ -26,11 +26,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ history, projects, s
           <LayoutGrid className="w-5 h-5" /> Monthly Look
         </button>
         <button
-          onClick={() => setActiveTab('gantt')}
+          onClick={() => setActiveTab('progress')}
           className={`flex items-center gap-2 px-6 py-3 text-lg font-medium rounded-t-xl transition-all
-            ${activeTab === 'gantt' ? 'bg-white/20 text-white border-b-4 border-white' : 'text-white/50 hover:text-white hover:bg-white/5'}`}
+            ${activeTab === 'progress' ? 'bg-white/20 text-white border-b-4 border-white' : 'text-white/50 hover:text-white hover:bg-white/5'}`}
         >
-          <BarChart className="w-5 h-5" /> Gantt Chart
+          <BarChart className="w-5 h-5" /> Progress
         </button>
       </div>
 
