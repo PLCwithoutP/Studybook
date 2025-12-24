@@ -60,36 +60,42 @@ export const GanttTimeline: React.FC<GanttTimelineProps> = ({ projects, settings
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // Color definitions (Hex without # for XLSX style)
     const COLORS = {
-      BLACK: "000000",
+      NAVY: "1E293B",  // Replaced Black with Navy for "Definition" fields visibility
       WHITE: "FFFFFF",
       GREEN: "4ADE80", // OK
       RED: "F87171",   // INCOMPLETE
       YELLOW: "FACC15", // FUTURE
-      GREY: "F3F4F6"
+      GREY_LIGHT: "F3F4F6",
+      GREY_BORDER: "E2E8F0",
+      INDIGO: "818CF8",
+      ROSE: "FB7185"
     };
 
     const data: any[] = [];
     
-    // 1. LEGEND WITH COLORS
-    data.push([{ v: "GANTT CHART LEGEND", s: { font: { bold: true } } }]);
-    data.push([{ v: "NOW", s: { fill: { fgColor: { rgb: COLORS.BLACK } }, font: { color: { rgb: COLORS.WHITE } } } }, { v: "Current Day" }]);
-    data.push([{ v: "OK", s: { fill: { fgColor: { rgb: COLORS.GREEN } } } }, { v: "Completed Work" }]);
-    data.push([{ v: "!", s: { fill: { fgColor: { rgb: COLORS.RED } } } }, { v: "Incomplete Past Work" }]);
-    data.push([{ v: "...", s: { fill: { fgColor: { rgb: COLORS.YELLOW } } } }, { v: "Future Scheduled" }]);
+    // 1. LEGEND WITH HIGH CONTRAST COLORS
+    data.push([{ v: "GANTT CHART LEGEND", s: { font: { bold: true, size: 14 } } }]);
+    data.push([{ v: "NOW", s: { fill: { fgColor: { rgb: COLORS.NAVY } }, font: { color: { rgb: COLORS.WHITE }, bold: true }, alignment: { horizontal: "center" } } }, { v: "Current Day (Today)" }]);
+    data.push([{ v: "OK", s: { fill: { fgColor: { rgb: COLORS.GREEN } }, alignment: { horizontal: "center" } } }, { v: "Completed Work on Schedule" }]);
+    data.push([{ v: "!", s: { fill: { fgColor: { rgb: COLORS.RED } }, font: { bold: true }, alignment: { horizontal: "center" } } }, { v: "Incomplete Past Work (Critical)" }]);
+    data.push([{ v: "...", s: { fill: { fgColor: { rgb: COLORS.YELLOW } }, alignment: { horizontal: "center" } } }, { v: "Future Scheduled Work" }]);
     data.push([]); // Spacer
 
     // 2. HEADER ROW (Dates)
-    // FIX: Using any[] to avoid strict type inference which causes "missing property" errors on later pushes
-    const headerRow: any[] = [{ v: "Project / Subtask", s: { font: { bold: true }, fill: { fgColor: { rgb: "E5E7EB" } } } }];
+    const headerRow: any[] = [
+      { v: "Project / Subtask", s: { font: { bold: true, color: { rgb: COLORS.WHITE } }, fill: { fgColor: { rgb: COLORS.NAVY } } } },
+      { v: "Importance", s: { font: { bold: true, color: { rgb: COLORS.WHITE } }, fill: { fgColor: { rgb: COLORS.NAVY } } } },
+      { v: "Urgency", s: { font: { bold: true, color: { rgb: COLORS.WHITE } }, fill: { fgColor: { rgb: COLORS.NAVY } } } }
+    ];
+    
     timelineRange.days.forEach(day => {
       const isToday = day.getTime() === today.getTime();
       headerRow.push({ 
         v: day.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }),
         s: { 
-          font: { bold: true, color: { rgb: isToday ? COLORS.WHITE : "000000" } },
-          fill: { fgColor: { rgb: isToday ? COLORS.BLACK : "E5E7EB" } },
+          font: { bold: true, color: { rgb: isToday ? COLORS.WHITE : "333333" } },
+          fill: { fgColor: { rgb: isToday ? COLORS.NAVY : "E5E7EB" } },
           alignment: { horizontal: "center" }
         }
       });
@@ -105,22 +111,24 @@ export const GanttTimeline: React.FC<GanttTimelineProps> = ({ projects, settings
       const totalDurationDays = Math.ceil(totalTarget / dailyTarget);
       const completedDays = Math.floor(totalDone / dailyTarget);
 
-      // FIX: Using any[] for projectRow
-      const projectRow: any[] = [{ v: project.name, s: { font: { bold: true } } }];
+      const projectRow: any[] = [
+        { v: project.name, s: { font: { bold: true, size: 12 }, fill: { fgColor: { rgb: "F8FAFC" } } } },
+        { v: "-" },
+        { v: "-" }
+      ];
 
       timelineRange.days.forEach(day => {
         const diffDays = Math.floor((day.getTime() - projectStart.getTime()) / (1000 * 60 * 60 * 24));
         const isInside = diffDays >= 0 && diffDays < totalDurationDays;
 
         if (!isInside) {
-          projectRow.push({ v: "" });
+          projectRow.push({ v: "", s: { fill: { fgColor: { rgb: "FFFFFF" } } } });
         } else {
           let style: any = { alignment: { horizontal: "center" } };
           let val = "";
-
           if (day.getTime() === today.getTime()) {
-            style.fill = { fgColor: { rgb: COLORS.BLACK } };
-            style.font = { color: { rgb: COLORS.WHITE } };
+            style.fill = { fgColor: { rgb: COLORS.NAVY } };
+            style.font = { color: { rgb: COLORS.WHITE }, bold: true };
             val = "NOW";
           } else if (day.getTime() < today.getTime()) {
             const isDone = diffDays < completedDays;
@@ -135,11 +143,14 @@ export const GanttTimeline: React.FC<GanttTimelineProps> = ({ projects, settings
       });
       data.push(projectRow);
 
-      // 4. SUBTASK ROWS
       let cumulativeTarget = 0;
       project.subtasks.forEach(task => {
-        // FIX: Using any[] for taskRow
-        const taskRow: any[] = [{ v: `  - ${task.name}`, s: { font: { italic: true } } }];
+        const taskRow: any[] = [
+          { v: `  - ${task.name}`, s: { font: { italic: true }, border: { bottom: { style: "thin", color: { rgb: COLORS.GREY_BORDER } } } } },
+          { v: task.importance === 'important' ? "Important" : "Normal", s: { font: { color: { rgb: task.importance === 'important' ? COLORS.INDIGO : "666666" } } } },
+          { v: task.urgency === 'emergent' ? "Emergent" : "Routine", s: { font: { color: { rgb: task.urgency === 'emergent' ? COLORS.ROSE : "666666" } } } }
+        ];
+        
         const taskStartOffset = Math.floor(cumulativeTarget / dailyTarget);
         const taskDurationDays = Math.ceil(task.targetSessions / dailyTarget);
         const taskCompletedDays = Math.floor(task.completedSessions / dailyTarget);
@@ -156,8 +167,8 @@ export const GanttTimeline: React.FC<GanttTimelineProps> = ({ projects, settings
             const relativeDayInTask = diffDays - taskStartOffset;
 
             if (day.getTime() === today.getTime()) {
-              style.fill = { fgColor: { rgb: COLORS.BLACK } };
-              style.font = { color: { rgb: COLORS.WHITE } };
+              style.fill = { fgColor: { rgb: COLORS.NAVY } };
+              style.font = { color: { rgb: COLORS.WHITE }, bold: true };
               val = "NOW";
             } else if (day.getTime() < today.getTime()) {
               const isDone = relativeDayInTask < taskCompletedDays;
@@ -174,27 +185,21 @@ export const GanttTimeline: React.FC<GanttTimelineProps> = ({ projects, settings
         data.push(taskRow);
       });
 
-      data.push([]); // Spacer
+      data.push([]);
     });
 
     try {
       const worksheet = XLSX.utils.aoa_to_sheet(data);
-      
-      // Column widths
-      const wscols = [{ wch: 35 }]; // Name column
-      for (let i = 0; i < timelineRange.days.length; i++) {
-        wscols.push({ wch: 6 }); // Tiny date columns for "grid" feel
-      }
+      const wscols = [{ wch: 35 }, { wch: 15 }, { wch: 15 }];
+      for (let i = 0; i < timelineRange.days.length; i++) wscols.push({ wch: 6 });
       worksheet['!cols'] = wscols;
 
       const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, "Styled Gantt");
-      
-      // Export as .xlsx because styles are most reliable in this format
-      XLSX.writeFile(workbook, `Studybook_Colored_Gantt_${new Date().toISOString().split('T')[0]}.xlsx`);
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Studybook Detailed Gantt");
+      XLSX.writeFile(workbook, `Studybook_Enhanced_Gantt_${new Date().toISOString().split('T')[0]}.xlsx`);
     } catch (err) {
       console.error("Export failed", err);
-      alert("Failed to generate styled spreadsheet.");
+      alert("Failed to generate spreadsheet.");
     }
   };
 
@@ -213,9 +218,8 @@ export const GanttTimeline: React.FC<GanttTimelineProps> = ({ projects, settings
       <div className="w-full bg-white/5 border border-white/10 rounded-3xl overflow-hidden shadow-2xl">
         <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-white/20">
           <div className="min-w-max">
-            {/* Header Axis */}
             <div className="flex bg-black/40 border-b border-white/10 sticky top-0 z-30">
-              <div className="w-64 sticky left-0 z-40 bg-gray-900/95 backdrop-blur-md p-4 font-bold border-r border-white/10 shrink-0 select-none">Project & Subtasks</div>
+              <div className="w-64 sticky left-0 z-40 bg-gray-900/95 backdrop-blur-md p-4 font-bold border-r border-white/10 shrink-0 select-none text-white">Project & Subtasks</div>
               <div className="flex">
                 {timelineRange.days.map((day, idx) => {
                   const isToday = day.toDateString() === new Date().toDateString();
@@ -223,8 +227,8 @@ export const GanttTimeline: React.FC<GanttTimelineProps> = ({ projects, settings
                   const isWeekend = day.getDay() === 0 || day.getDay() === 6;
                   return (
                     <div key={idx} style={{ width: dayWidth }} className={`flex flex-col items-center justify-center py-2 shrink-0 border-r border-white/5 text-[10px] relative ${isToday ? 'bg-white/10' : ''} ${isWeekend ? 'bg-black/10' : ''}`}>
-                      <span className="opacity-50 font-mono text-[9px]">{day.toLocaleDateString('en-US', { weekday: 'narrow' })}</span>
-                      <span className={`font-bold ${isToday ? 'text-yellow-400' : 'opacity-80'}`}>{day.getDate()}</span>
+                      <span className="opacity-50 font-mono text-[9px] text-white">{day.toLocaleDateString('en-US', { weekday: 'narrow' })}</span>
+                      <span className={`font-bold ${isToday ? 'text-yellow-400' : 'opacity-80 text-white'}`}>{day.getDate()}</span>
                       {isFirstOfMonth && <div className="absolute top-0 left-1 text-[8px] uppercase tracking-tighter text-blue-300 font-bold mt-0.5">{day.toLocaleDateString('en-US', { month: 'short' })}</div>}
                     </div>
                   );
@@ -232,9 +236,7 @@ export const GanttTimeline: React.FC<GanttTimelineProps> = ({ projects, settings
               </div>
             </div>
 
-            {/* Project Rows */}
             <div className="relative">
-              {/* Today Line */}
               <div 
                 className="absolute top-0 bottom-0 w-px bg-yellow-400/50 z-20 pointer-events-none"
                 style={{ 
@@ -255,12 +257,11 @@ export const GanttTimeline: React.FC<GanttTimelineProps> = ({ projects, settings
 
                 return (
                   <React.Fragment key={project.id}>
-                    {/* Main Project Row */}
                     <div 
                       onClick={() => toggleProject(project.id)}
                       className="flex border-b border-white/5 group hover:bg-white/5 transition-colors cursor-pointer"
                     >
-                      <div className="w-64 sticky left-0 z-20 bg-gray-900/90 backdrop-blur-md p-3 border-r border-white/10 text-sm font-bold truncate shrink-0 flex items-center gap-2">
+                      <div className="w-64 sticky left-0 z-20 bg-gray-900/90 backdrop-blur-md p-3 border-r border-white/10 text-sm font-bold truncate shrink-0 flex items-center gap-2 text-white">
                         {isExpanded ? <ChevronDown className="w-4 h-4 text-white/40" /> : <ChevronRight className="w-4 h-4 text-white/40" />}
                         <span className="truncate">{project.name}</span>
                       </div>
@@ -285,7 +286,6 @@ export const GanttTimeline: React.FC<GanttTimelineProps> = ({ projects, settings
                       </div>
                     </div>
 
-                    {/* Subtask Rows */}
                     {isExpanded && project.subtasks.map((task) => {
                       const taskStartDays = cumulativeSessions / dailyTarget;
                       const taskDurationDays = task.targetSessions / dailyTarget;
@@ -298,7 +298,7 @@ export const GanttTimeline: React.FC<GanttTimelineProps> = ({ projects, settings
 
                       return (
                         <div key={task.id} className="flex border-b border-white/5 bg-black/10 group/sub hover:bg-white/5 transition-colors">
-                          <div className="w-64 sticky left-0 z-20 bg-gray-900/90 backdrop-blur-md p-3 pl-10 border-r border-white/10 text-xs font-medium italic opacity-70 truncate shrink-0">
+                          <div className="w-64 sticky left-0 z-20 bg-gray-900/90 backdrop-blur-md p-3 pl-10 border-r border-white/10 text-xs font-medium italic opacity-70 truncate shrink-0 text-white/80">
                             {task.name}
                           </div>
                           <div className="flex items-center relative py-3" style={{ width: timelineRange.days.length * dayWidth }}>
@@ -331,7 +331,7 @@ export const GanttTimeline: React.FC<GanttTimelineProps> = ({ projects, settings
             <span className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-yellow-400" /> Today</span>
             <span>Duration = Σ(Target Pomodoros) / {dailyTarget} (Daily Target)</span>
           </div>
-          <div className="opacity-60">Click project names to expand subtasks</div>
+          <div className="opacity-60">High contrast legend and labels are included in Excel export.</div>
         </div>
       </div>
 
@@ -341,7 +341,7 @@ export const GanttTimeline: React.FC<GanttTimelineProps> = ({ projects, settings
           className="flex items-center gap-3 px-8 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl font-bold shadow-xl transition-all active:scale-95 group"
         >
           <FileSpreadsheet className="w-5 h-5 group-hover:scale-110 transition-transform" />
-          Export Colored Spreadsheet (.xlsx)
+          Export Detailed Gantt with Labels (.xlsx)
         </button>
       </div>
     </div>

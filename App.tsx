@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { AppData, Project, TimerMode, AppSessionLog, AppSettings } from './types';
+import { AppData, Project, TimerMode, AppSessionLog, AppSettings, Importance, Urgency, Subtask } from './types';
 import { getIstanbulDate, generateId, calculateProjectStats, formatTime } from './utils';
 import { Button } from './components/Button';
 import { Modal } from './components/Modal';
 import { AppSessionTimer } from './components/AppSessionTimer';
 import { PerformanceGraph } from './components/PerformanceGraph';
 import { CalendarView } from './components/CalendarView';
-import { Trash2, Plus, Minus, SkipForward, Menu, Download, Upload, Book, Settings, Target, BarChart3, ArrowLeft, RotateCcw, Calendar as CalendarIcon } from 'lucide-react';
+import { Trash2, Plus, Minus, SkipForward, Menu, Download, Upload, Book, Settings, Target, BarChart3, ArrowLeft, RotateCcw, Calendar as CalendarIcon, Edit2 } from 'lucide-react';
 
 const DEFAULT_SETTINGS: AppSettings = {
   durations: {
@@ -38,12 +38,25 @@ const App: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isAddProjectModalOpen, setIsAddProjectModalOpen] = useState(false);
   const [isAddSubtaskModalOpen, setIsAddSubtaskModalOpen] = useState(false);
+  const [isEditSubtaskModalOpen, setIsEditSubtaskModalOpen] = useState(false);
   const [isPerformanceViewOpen, setIsPerformanceViewOpen] = useState(false);
   const [isCalendarViewOpen, setIsCalendarViewOpen] = useState(false);
+  
+  // State for new project modal
   const [newProjectName, setNewProjectName] = useState('');
-  const [newSubtasks, setNewSubtasks] = useState<{name: string, target: number}[]>([{name: '', target: 1}]);
-  const [subtaskToAddName, setSubtaskToAddName] = useState('');
-  const [subtaskToAddTarget, setSubtaskToAddTarget] = useState(1);
+  const [newSubtasks, setNewSubtasks] = useState<{name: string, target: number, importance: Importance, urgency: Urgency}[]>([
+    {name: '', target: 1, importance: 'not-important', urgency: 'not-emergent'}
+  ]);
+  
+  // State for add/edit subtask modal
+  const [editingSubtask, setEditingSubtask] = useState<Subtask | null>(null);
+  const [subtaskForm, setSubtaskForm] = useState({
+    name: '',
+    target: 1,
+    importance: 'not-important' as Importance,
+    urgency: 'not-emergent' as Urgency
+  });
+
   const currentSessionDuration = useRef<string>("00:00:00");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -120,22 +133,66 @@ const App: React.FC = () => {
       name: newProjectName,
       createdAt: new Date().toISOString(),
       subtasks: newSubtasks.filter(st => st.name.trim() !== '').map(st => ({
-        id: generateId(), name: st.name, targetSessions: st.target, completedSessions: 0
+        id: generateId(), 
+        name: st.name, 
+        targetSessions: st.target, 
+        completedSessions: 0,
+        importance: st.importance,
+        urgency: st.urgency
       }))
     };
     setProjects([...projects, newProject]);
     setNewProjectName('');
-    setNewSubtasks([{name: '', target: 1}]);
+    setNewSubtasks([{name: '', target: 1, importance: 'not-important', urgency: 'not-emergent'}]);
     setIsAddProjectModalOpen(false);
+    if (!selectedProjectId) setSelectedProjectId(newProject.id);
   };
 
   const handleAddSubtask = () => {
-    if (!selectedProjectId || !subtaskToAddName.trim()) return;
-    const newSubtask = { id: generateId(), name: subtaskToAddName, targetSessions: subtaskToAddTarget, completedSessions: 0 };
+    if (!selectedProjectId || !subtaskForm.name.trim()) return;
+    const newSubtask: Subtask = { 
+      id: generateId(), 
+      name: subtaskForm.name, 
+      targetSessions: subtaskForm.target, 
+      completedSessions: 0,
+      importance: subtaskForm.importance,
+      urgency: subtaskForm.urgency
+    };
     setProjects(prev => prev.map(p => p.id !== selectedProjectId ? p : { ...p, subtasks: [...p.subtasks, newSubtask] }));
-    setSubtaskToAddName('');
-    setSubtaskToAddTarget(1);
+    resetSubtaskForm();
     setIsAddSubtaskModalOpen(false);
+  };
+
+  const handleUpdateSubtask = () => {
+    if (!selectedProjectId || !editingSubtask || !subtaskForm.name.trim()) return;
+    setProjects(prev => prev.map(p => p.id !== selectedProjectId ? p : {
+      ...p,
+      subtasks: p.subtasks.map(t => t.id !== editingSubtask.id ? t : {
+        ...t,
+        name: subtaskForm.name,
+        targetSessions: subtaskForm.target,
+        importance: subtaskForm.importance,
+        urgency: subtaskForm.urgency
+      })
+    }));
+    resetSubtaskForm();
+    setIsEditSubtaskModalOpen(false);
+  };
+
+  const resetSubtaskForm = () => {
+    setSubtaskForm({ name: '', target: 1, importance: 'not-important', urgency: 'not-emergent' });
+    setEditingSubtask(null);
+  };
+
+  const openEditSubtask = (subtask: Subtask) => {
+    setEditingSubtask(subtask);
+    setSubtaskForm({
+      name: subtask.name,
+      target: subtask.targetSessions,
+      importance: subtask.importance,
+      urgency: subtask.urgency
+    });
+    setIsEditSubtaskModalOpen(true);
   };
 
   const updateSessionTarget = (projectId: string, subtaskId: string, increment: number) => {
@@ -169,7 +226,10 @@ const App: React.FC = () => {
     reader.onload = (e) => {
       try {
         const json = JSON.parse(e.target?.result as string) as AppData;
-        if (json.projects) setProjects(json.projects);
+        if (json.projects) {
+          setProjects(json.projects);
+          if (json.projects.length > 0) setSelectedProjectId(json.projects[0].id);
+        }
         if (json.appHistory) setAppHistory(json.appHistory);
         if (json.settings) setSettings(json.settings);
       } catch (err) { alert('Failed to parse JSON file.'); }
@@ -198,6 +258,11 @@ const App: React.FC = () => {
     return segments;
   }, [selectedProject, activeSubtaskId]);
 
+  // Force light color scheme and explicit background/text for modal inputs
+  const fieldStyle = { colorScheme: 'light' } as React.CSSProperties;
+  const inputClass = "w-full !bg-white !text-gray-900 border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-rose-500 outline-none transition-all placeholder:text-gray-400";
+  const selectClass = "w-full !bg-white !text-gray-900 border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-rose-500 outline-none transition-all";
+
   return (
     <div className="min-h-screen transition-colors duration-500 ease-in-out font-sans flex flex-col md:flex-row text-white overflow-hidden relative" style={{ backgroundColor: activeColor }}>
       
@@ -222,7 +287,7 @@ const App: React.FC = () => {
                 <div key={project.id} onClick={() => { setSelectedProjectId(project.id); setIsPerformanceViewOpen(false); setIsCalendarViewOpen(false); }} className={`p-4 rounded-lg cursor-pointer transition-all border ${selectedProjectId === project.id ? 'bg-white/20 border-white/40 shadow-lg' : 'bg-white/5 border-transparent hover:bg-white/10'}`}>
                   <div className="flex justify-between items-start mb-2">
                     <h3 className="font-semibold truncate pr-2">{project.name}</h3>
-                    <button onClick={(e) => { e.stopPropagation(); if (window.confirm("Delete project?")) setProjects(projects.filter(p => p.id !== project.id)); }} className="text-white/50 hover:text-white p-1"><Trash2 className="w-4 h-4" /></button>
+                    <button onClick={(e) => { e.stopPropagation(); if (window.confirm("Delete project?")) { setProjects(projects.filter(p => p.id !== project.id)); if (selectedProjectId === project.id) setSelectedProjectId(null); } }} className="text-white/50 hover:text-white p-1"><Trash2 className="w-4 h-4" /></button>
                   </div>
                   <div className="w-full bg-black/20 rounded-full h-1.5 overflow-hidden">
                     <div className="bg-white h-1.5 rounded-full transition-all duration-500" style={{ width: `${stats.totalSessions > 0 ? (stats.completedSessions / stats.totalSessions) * 100 : 0}%` }} />
@@ -235,7 +300,7 @@ const App: React.FC = () => {
           <div className="mt-6 pt-6 border-t border-white/10 space-y-2">
              <button onClick={() => setIsSettingsModalOpen(true)} className="w-full flex items-center gap-3 px-4 py-2 rounded hover:bg-white/10 transition-colors text-sm"><Settings className="w-4 h-4" /> Settings</button>
              <button onClick={() => { setIsPerformanceViewOpen(true); setIsCalendarViewOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-2 rounded transition-colors text-sm ${isPerformanceViewOpen ? 'bg-white/30' : 'hover:bg-white/10'}`}><BarChart3 className="w-4 h-4" /> Performance</button>
-             <button onClick={() => { setIsCalendarViewOpen(true); setIsPerformanceViewOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-2 rounded transition-colors text-sm ${isCalendarViewOpen ? 'bg-white/30' : 'hover:bg-white/10'}`}><CalendarIcon className="w-4 h-4" /> Calendar</button>
+             <button onClick={() => { setIsCalendarViewOpen(true); setIsPerformanceViewOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-2 rounded transition-colors text-sm ${isCalendarViewOpen ? 'bg-white/30' : 'hover:bg-white/10'}`}><CalendarIcon className="w-4 h-4" /> Agenda</button>
              <button onClick={handleExport} className="w-full flex items-center gap-3 px-4 py-2 rounded hover:bg-white/10 transition-colors text-sm"><Download className="w-4 h-4" /> Export Data</button>
              <label className="w-full flex items-center gap-3 px-4 py-2 rounded hover:bg-white/10 transition-colors text-sm cursor-pointer"><Upload className="w-4 h-4" /> Import Data<input type="file" ref={fileInputRef} onChange={handleImport} accept=".json" className="hidden" /></label>
           </div>
@@ -260,10 +325,10 @@ const App: React.FC = () => {
           ) : isCalendarViewOpen ? (
             <div className="w-full max-w-5xl animate-fade-in-up mt-8 bg-white/10 backdrop-blur-md rounded-3xl p-8 shadow-2xl">
               <div className="flex items-center justify-between mb-8">
-                <h2 className="text-3xl font-bold flex items-center gap-3"><CalendarIcon className="w-8 h-8" /> Calendar & Timelines</h2>
+                <h2 className="text-3xl font-bold flex items-center gap-3"><CalendarIcon className="w-8 h-8" /> Studybook Agenda</h2>
                 <button onClick={() => setIsCalendarViewOpen(false)} className="flex items-center gap-2 bg-white/20 px-4 py-2 rounded-lg hover:bg-white/30 transition-colors"><ArrowLeft className="w-4 h-4" /> Back to Timer</button>
               </div>
-              <CalendarView history={appHistory} projects={projects} settings={settings} />
+              <CalendarView history={appHistory} projects={projects} settings={settings} activeProjectId={selectedProjectId} onProjectSelect={setSelectedProjectId} />
             </div>
           ) : (
             <>
@@ -300,7 +365,7 @@ const App: React.FC = () => {
               </div>
 
               {selectedProject && selectedProjectStats && (
-                <div className="w-full max-w-[480px] animate-fade-in-up">
+                <div className="w-full max-w-[550px] animate-fade-in-up">
                   <div className="flex justify-between items-end mb-4 border-b border-white/30 pb-2">
                      <div>
                        <h2 className="text-2xl font-bold">{selectedProject.name}</h2>
@@ -311,22 +376,34 @@ const App: React.FC = () => {
                   <div className="space-y-3">
                     {selectedProject.subtasks.map(task => (
                       <div key={task.id} onClick={() => setActiveSubtaskId(task.id)} className={`relative p-4 rounded-xl border-l-8 cursor-pointer transition-all hover:brightness-110 ${task.completedSessions >= task.targetSessions ? 'bg-emerald-500/20 border-emerald-400' : 'bg-rose-500/10 border-rose-300' } ${activeSubtaskId === task.id ? 'ring-2 ring-white ring-offset-2 ring-offset-transparent transform scale-[1.02] shadow-xl' : ''}`}>
-                         <div className="flex justify-between items-center">
-                            <span className={`font-medium text-lg ${task.completedSessions >= task.targetSessions ? 'line-through text-white/50 italic' : 'text-white'}`}>{task.name}</span>
-                            <div className="flex items-center gap-4">
-                               <div className="font-mono text-lg font-bold">{task.completedSessions} <span className="opacity-50 text-sm">/ {task.targetSessions}</span></div>
-                               <div className="flex items-center gap-1 bg-black/20 rounded-lg p-1">
-                                 <button onClick={(e) => { e.stopPropagation(); updateSessionTarget(selectedProject.id, task.id, -1); }} className="p-1 hover:bg-white/20 rounded transition-colors" disabled={task.targetSessions <= task.completedSessions || task.targetSessions <= 1}><Minus className="w-4 h-4" /></button>
-                                 <button onClick={(e) => { e.stopPropagation(); updateSessionTarget(selectedProject.id, task.id, 1); }} className="p-1 hover:bg-white/20 rounded transition-colors"><Plus className="w-4 h-4" /></button>
+                         <div className="flex flex-col gap-2">
+                            <div className="flex justify-between items-center">
+                               <span className={`font-medium text-lg ${task.completedSessions >= task.targetSessions ? 'line-through text-white/50 italic' : 'text-white'}`}>{task.name}</span>
+                               <div className="flex items-center gap-4">
+                                  <div className="font-mono text-lg font-bold">{task.completedSessions} <span className="opacity-50 text-sm">/ {task.targetSessions}</span></div>
+                                  <div className="flex items-center gap-1 bg-black/20 rounded-lg p-1">
+                                    <button onClick={(e) => { e.stopPropagation(); updateSessionTarget(selectedProject.id, task.id, -1); }} className="p-1 hover:bg-white/20 rounded transition-colors" disabled={task.targetSessions <= task.completedSessions || task.targetSessions <= 1}><Minus className="w-4 h-4" /></button>
+                                    <button onClick={(e) => { e.stopPropagation(); updateSessionTarget(selectedProject.id, task.id, 1); }} className="p-1 hover:bg-white/20 rounded transition-colors"><Plus className="w-4 h-4" /></button>
+                                  </div>
+                                  <button onClick={(e) => { e.stopPropagation(); openEditSubtask(task); }} className="p-1 hover:bg-white/20 text-white/70"><Edit2 className="w-4 h-4" /></button>
+                                  <button onClick={(e) => { e.stopPropagation(); if (window.confirm("Delete subtask?")) setProjects(prev => prev.map(p => p.id !== selectedProject.id ? p : { ...p, subtasks: p.subtasks.filter(t => t.id !== task.id) })); }} className="p-1 hover:bg-white/20 text-white/70"><Trash2 className="w-5 h-5" /></button>
                                </div>
-                               <button onClick={(e) => { e.stopPropagation(); if (window.confirm("Delete subtask?")) setProjects(prev => prev.map(p => p.id !== selectedProject.id ? p : { ...p, subtasks: p.subtasks.filter(t => t.id !== task.id) })); }} className="p-1 hover:bg-white/20 text-white/70"><Trash2 className="w-5 h-5" /></button>
+                            </div>
+                            {/* Priority and Urgency Tags */}
+                            <div className="flex gap-2">
+                               <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${task.importance === 'important' ? 'bg-indigo-500 text-white' : 'bg-slate-500/50 text-white/70'}`}>
+                                 {task.importance === 'important' ? 'Important' : 'Normal'}
+                               </span>
+                               <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${task.urgency === 'emergent' ? 'bg-rose-500 text-white' : 'bg-emerald-500/50 text-white/70'}`}>
+                                 {task.urgency === 'emergent' ? 'Emergent' : 'Routine'}
+                               </span>
                             </div>
                          </div>
                          {activeSubtaskId === task.id && <div className="absolute -right-2 -top-2 bg-white text-gray-900 rounded-full p-1 shadow-sm"><Target className="w-4 h-4" /></div>}
                       </div>
                     ))}
                   </div>
-                  <button onClick={() => setIsAddSubtaskModalOpen(true)} className="w-full py-3 mt-4 border-2 border-dashed border-white/20 rounded-xl hover:bg-white/10 text-white/70 flex items-center justify-center gap-2 transition-colors font-medium"><Plus className="w-5 h-5" /> Add Subtask</button>
+                  <button onClick={() => { resetSubtaskForm(); setIsAddSubtaskModalOpen(true); }} className="w-full py-3 mt-4 border-2 border-dashed border-white/20 rounded-xl hover:bg-white/10 text-white/70 flex items-center justify-center gap-2 transition-colors font-medium"><Plus className="w-5 h-5" /> Add Subtask</button>
                 </div>
               )}
             </>
@@ -344,7 +421,7 @@ const App: React.FC = () => {
                {Object.keys(settings.durations).map((key) => (
                  <div key={key}>
                    <label className="block text-sm text-gray-500 mb-1 capitalize">{key.replace(/([A-Z])/g, ' $1')}</label>
-                   <input type="number" value={settings.durations[key as keyof typeof settings.durations]} onChange={(e) => setSettings({...settings, durations: {...settings.durations, [key]: parseInt(e.target.value) || 1}})} className="w-full bg-gray-100 border-none rounded px-3 py-2 text-gray-800" />
+                   <input type="number" style={fieldStyle} value={settings.durations[key as keyof typeof settings.durations]} onChange={(e) => setSettings({...settings, durations: {...settings.durations, [key]: parseInt(e.target.value) || 1}})} className={inputClass} />
                  </div>
                ))}
              </div>
@@ -354,7 +431,7 @@ const App: React.FC = () => {
              <div className="grid grid-cols-1 gap-4">
                <div>
                  <label className="block text-sm text-gray-500 mb-1">Daily Pomodoro Target</label>
-                 <input type="number" min="1" value={settings.dailyPomodoroTarget} onChange={(e) => setSettings({...settings, dailyPomodoroTarget: parseInt(e.target.value) || 1})} className="w-full bg-gray-100 border-none rounded px-3 py-2 text-gray-800" />
+                 <input type="number" min="1" style={fieldStyle} value={settings.dailyPomodoroTarget} onChange={(e) => setSettings({...settings, dailyPomodoroTarget: parseInt(e.target.value) || 1})} className={inputClass} />
                  <p className="text-[10px] text-gray-400 mt-1 italic">Used for estimating project spans on the calendar.</p>
                </div>
              </div>
@@ -365,7 +442,7 @@ const App: React.FC = () => {
                {Object.keys(settings.colors).map((key) => (
                  <div key={key}>
                    <label className="block text-sm text-gray-500 mb-1 capitalize">{key}</label>
-                   <input type="color" value={settings.colors[key as keyof typeof settings.colors]} onChange={(e) => setSettings({...settings, colors: {...settings.colors, [key]: e.target.value}})} className="w-full h-10 rounded cursor-pointer border border-gray-200 p-1" />
+                   <input type="color" style={fieldStyle} value={settings.colors[key as keyof typeof settings.colors]} onChange={(e) => setSettings({...settings, colors: {...settings.colors, [key]: e.target.value}})} className="w-full h-10 rounded cursor-pointer border border-gray-300 bg-white p-1" />
                  </div>
                ))}
              </div>
@@ -376,25 +453,90 @@ const App: React.FC = () => {
 
       <Modal isOpen={isAddProjectModalOpen} onClose={() => setIsAddProjectModalOpen(false)} title="New Project">
         <div className="space-y-4 text-gray-800">
-           <input type="text" value={newProjectName} onChange={(e) => setNewProjectName(e.target.value)} placeholder="Project Name" className="w-full border rounded px-3 py-2 focus:ring-2 focus:ring-rose-500 outline-none" />
-           <div className="space-y-2 max-h-40 overflow-y-auto">
+           <input type="text" style={fieldStyle} value={newProjectName} onChange={(e) => setNewProjectName(e.target.value)} placeholder="Project Name" className={inputClass} />
+           <div className="space-y-4 max-h-64 overflow-y-auto pr-2">
              {newSubtasks.map((st, idx) => (
-               <div key={idx} className="flex gap-2">
-                 <input type="text" value={st.name} onChange={(e) => { const copy = [...newSubtasks]; copy[idx].name = e.target.value; setNewSubtasks(copy); }} placeholder="Subtask" className="flex-1 border rounded px-2 py-1 text-sm" />
-                 <input type="number" value={st.target} onChange={(e) => { const copy = [...newSubtasks]; copy[idx].target = parseInt(e.target.value) || 1; setNewSubtasks(copy); }} className="w-12 border rounded px-1 text-sm text-center" />
+               <div key={idx} className="p-3 border rounded-xl bg-gray-50 space-y-2">
+                 <div className="flex gap-2">
+                   <input type="text" style={fieldStyle} value={st.name} onChange={(e) => { const copy = [...newSubtasks]; copy[idx] = { ...copy[idx], name: e.target.value }; setNewSubtasks(copy); }} placeholder="Subtask name" className={inputClass + " flex-1"} />
+                   <input type="number" style={fieldStyle} value={st.target} onChange={(e) => { const copy = [...newSubtasks]; copy[idx] = { ...copy[idx], target: parseInt(e.target.value) || 1 }; setNewSubtasks(copy); }} className={inputClass + " w-16 text-center"} />
+                   <button onClick={() => setNewSubtasks(newSubtasks.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
+                 </div>
+                 <div className="flex gap-2">
+                    <select style={fieldStyle} value={st.importance} onChange={(e) => { const copy = [...newSubtasks]; copy[idx] = { ...copy[idx], importance: e.target.value as Importance }; setNewSubtasks(copy); }} className={selectClass}>
+                       <option value="important">Important</option>
+                       <option value="not-important">Not Important</option>
+                    </select>
+                    <select style={fieldStyle} value={st.urgency} onChange={(e) => { const copy = [...newSubtasks]; copy[idx] = { ...copy[idx], urgency: e.target.value as Urgency }; setNewSubtasks(copy); }} className={selectClass}>
+                       <option value="emergent">Emergent</option>
+                       <option value="not-emergent">Not Emergent</option>
+                    </select>
+                 </div>
                </div>
              ))}
            </div>
-           <button onClick={() => setNewSubtasks([...newSubtasks, {name: '', target: 1}])} className="text-rose-500 text-sm font-medium">+ Add Subtask</button>
-           <div className="flex justify-end pt-4"><Button onClick={handleAddProject}>Save</Button></div>
+           <button onClick={() => setNewSubtasks([...newSubtasks, {name: '', target: 1, importance: 'not-important', urgency: 'not-emergent'}])} className="text-rose-500 text-sm font-medium flex items-center gap-1"><Plus className="w-4 h-4" /> Add Another Subtask</button>
+           <div className="flex justify-end pt-4"><Button onClick={handleAddProject}>Create Project</Button></div>
         </div>
       </Modal>
 
       <Modal isOpen={isAddSubtaskModalOpen} onClose={() => setIsAddSubtaskModalOpen(false)} title="Add Subtask">
         <div className="space-y-4 text-gray-800">
-           <input type="text" value={subtaskToAddName} onChange={(e) => setSubtaskToAddName(e.target.value)} placeholder="Subtask Name" className="w-full border rounded px-3 py-2 focus:ring-2 focus:ring-rose-500 outline-none" />
-           <input type="number" min="1" value={subtaskToAddTarget} onChange={(e) => setSubtaskToAddTarget(parseInt(e.target.value) || 1)} className="w-full border rounded px-3 py-2" />
-           <div className="flex justify-end pt-4"><Button onClick={handleAddSubtask}>Add</Button></div>
+           <div className="space-y-1">
+             <label className="text-xs font-bold text-gray-400 uppercase">Name</label>
+             <input type="text" style={fieldStyle} value={subtaskForm.name} onChange={(e) => setSubtaskForm({...subtaskForm, name: e.target.value})} placeholder="What needs to be done?" className={inputClass} />
+           </div>
+           <div className="grid grid-cols-2 gap-4">
+             <div className="space-y-1">
+               <label className="text-xs font-bold text-gray-400 uppercase">Target Pomodoros</label>
+               <input type="number" min="1" style={fieldStyle} value={subtaskForm.target} onChange={(e) => setSubtaskForm({...subtaskForm, target: parseInt(e.target.value) || 1})} className={inputClass} />
+             </div>
+             <div className="space-y-1">
+               <label className="text-xs font-bold text-gray-400 uppercase">Importance</label>
+               <select style={fieldStyle} value={subtaskForm.importance} onChange={(e) => setSubtaskForm({...subtaskForm, importance: e.target.value as Importance})} className={selectClass}>
+                 <option value="important">Important</option>
+                 <option value="not-important">Not Important</option>
+               </select>
+             </div>
+           </div>
+           <div className="space-y-1">
+             <label className="text-xs font-bold text-gray-400 uppercase">Urgency</label>
+             <select style={fieldStyle} value={subtaskForm.urgency} onChange={(e) => setSubtaskForm({...subtaskForm, urgency: e.target.value as Urgency})} className={selectClass}>
+               <option value="emergent">Emergent</option>
+               <option value="not-emergent">Not Emergent</option>
+             </select>
+           </div>
+           <div className="flex justify-end pt-4"><Button onClick={handleAddSubtask}>Add Subtask</Button></div>
+        </div>
+      </Modal>
+
+      <Modal isOpen={isEditSubtaskModalOpen} onClose={() => setIsEditSubtaskModalOpen(false)} title="Edit Subtask">
+        <div className="space-y-4 text-gray-800">
+           <div className="space-y-1">
+             <label className="text-xs font-bold text-gray-400 uppercase">Name</label>
+             <input type="text" style={fieldStyle} value={subtaskForm.name} onChange={(e) => setSubtaskForm({...subtaskForm, name: e.target.value})} placeholder="Task name" className={inputClass} />
+           </div>
+           <div className="grid grid-cols-2 gap-4">
+             <div className="space-y-1">
+               <label className="text-xs font-bold text-gray-400 uppercase">Target Pomodoros</label>
+               <input type="number" min="1" style={fieldStyle} value={subtaskForm.target} onChange={(e) => setSubtaskForm({...subtaskForm, target: parseInt(e.target.value) || 1})} className={inputClass} />
+             </div>
+             <div className="space-y-1">
+               <label className="text-xs font-bold text-gray-400 uppercase">Importance</label>
+               <select style={fieldStyle} value={subtaskForm.importance} onChange={(e) => setSubtaskForm({...subtaskForm, importance: e.target.value as Importance})} className={selectClass}>
+                 <option value="important">Important</option>
+                 <option value="not-important">Not Important</option>
+               </select>
+             </div>
+           </div>
+           <div className="space-y-1">
+             <label className="text-xs font-bold text-gray-400 uppercase">Urgency</label>
+             <select style={fieldStyle} value={subtaskForm.urgency} onChange={(e) => setSubtaskForm({...subtaskForm, urgency: e.target.value as Urgency})} className={selectClass}>
+               <option value="emergent">Emergent</option>
+               <option value="not-emergent">Not Emergent</option>
+             </select>
+           </div>
+           <div className="flex justify-end pt-4"><Button onClick={handleUpdateSubtask}>Save Changes</Button></div>
         </div>
       </Modal>
     </div>

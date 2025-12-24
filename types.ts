@@ -1,9 +1,14 @@
 
+export type Importance = 'important' | 'not-important';
+export type Urgency = 'emergent' | 'not-emergent';
+
 export interface Subtask {
   id: string;
   name: string;
   targetSessions: number;
   completedSessions: number;
+  importance: Importance;
+  urgency: Urgency;
 }
 
 export interface Project {
