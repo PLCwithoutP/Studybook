@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Project, AppSettings } from '../types';
 import { ChevronRight, ChevronDown, FileSpreadsheet } from 'lucide-react';
-import XLSX from 'xlsx';
+import XLSX from 'xlsx-js-style';
 
 interface GanttTimelineProps {
   projects: Project[];
