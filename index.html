@@ -61,6 +61,36 @@
         -ms-overflow-style: none;
         scrollbar-width: none;
       }
+
+      /* Markdown specific styling */
+      .prose {
+        color: inherit;
+        font-size: 0.875rem;
+        line-height: 1.5;
+      }
+      .prose ul, .prose ol {
+        padding-left: 1.25rem;
+        margin-top: 0.5rem;
+        margin-bottom: 0.5rem;
+        list-style-type: disc;
+      }
+      .prose ol {
+        list-style-type: decimal;
+      }
+      .prose li {
+        margin-top: 0.25rem;
+        margin-bottom: 0.25rem;
+      }
+      .prose p {
+        margin-top: 0.5rem;
+        margin-bottom: 0.5rem;
+      }
+      .prose strong {
+        font-weight: 700;
+      }
+      .prose em {
+        font-style: italic;
+      }
     </style>
 <script type="importmap">
 {
@@ -72,7 +102,9 @@
     "vite": "https://esm.sh/vite@^7.3.0",
     "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
     "xlsx": "https://esm.sh/xlsx-js-style@^1.2.0",
-    "xlsx-js-style": "https://esm.sh/xlsx-js-style@^1.2.0"
+    "xlsx-js-style": "https://esm.sh/xlsx-js-style@^1.2.0",
+    "marked": "https://esm.sh/marked@^15.0.0",
+    "dompurify": "https://esm.sh/dompurify@^3.1.0"
   }
 }
 </script>

@@ -1,7 +1,8 @@
-
 import React, { useState, useMemo } from 'react';
 import { AppSessionLog, Project, AppSettings } from '../types';
-import { ChevronLeft, ChevronRight, X, CheckCircle, Target, FileText, Clock } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, CheckCircle, Target, FileText, Clock, Edit3, Eye } from 'lucide-react';
+import { marked } from 'marked';
+import DOMPurify from 'dompurify';
 
 interface MonthlyCalendarProps {
   history: AppSessionLog[];
@@ -22,6 +23,21 @@ const DOT_COLORS = [
 
 const HOURS = Array.from({ length: 16 }, (_, i) => `${(i + 8).toString().padStart(2, '0')}:00`);
 
+// Helper component for rendering Markdown securely
+const Markdown: React.FC<{ content: string, className?: string }> = ({ content, className = "" }) => {
+  const html = useMemo(() => {
+    const rawHtml = marked.parse(content || '') as string;
+    return DOMPurify.sanitize(rawHtml);
+  }, [content]);
+
+  return (
+    <div 
+      className={`prose max-w-none ${className}`} 
+      dangerouslySetInnerHTML={{ __html: html }} 
+    />
+  );
+};
+
 export const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({ 
   history, 
   projects, 
@@ -33,6 +49,7 @@ export const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({
 }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
 
   const today = useMemo(() => new Date(), []);
 
@@ -148,7 +165,6 @@ export const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({
           const focusMins = historyMap[dateStringHistory] || 0;
           const dots = projectsByDay[dateKey] || [];
           
-          // Fix: Ensure 'v' is treated as a string to avoid 'unknown' type error on .trim()
           const hasAgenda = dayAgendas[dateKey] && Object.values(dayAgendas[dateKey]).some((v) => (v as string).trim() !== '');
           const hasNote = !!dayNotes[dateKey]?.trim();
           const showsIcon = hasAgenda || hasNote;
@@ -200,7 +216,7 @@ export const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({
 
       {/* Expanded Day Detail Window */}
       {selectedDay !== null && selectedDayKey && (
-        <div className="absolute z-50 top-16 right-0 w-[400px] animate-fade-in-up">
+        <div className="absolute z-50 top-16 right-0 w-[420px] animate-fade-in-up">
            <div className="bg-gray-900/95 backdrop-blur-2xl border border-white/20 rounded-[2rem] p-6 shadow-2xl text-white">
               <div className="flex justify-between items-center mb-6">
                  <h4 className="text-xl font-bold flex items-center gap-2">
@@ -234,15 +250,30 @@ export const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({
 
                  {/* General Notes Section */}
                  <div>
-                    <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] text-white/40 font-bold mb-3">
-                      <FileText className="w-3 h-3" /> General Day Description
+                    <div className="flex items-center justify-between gap-2 mb-3">
+                      <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] text-white/40 font-bold">
+                        <FileText className="w-3 h-3" /> Day Description (Markdown)
+                      </div>
+                      <button 
+                        onClick={() => setIsPreviewMode(!isPreviewMode)}
+                        className="flex items-center gap-1.5 text-[10px] bg-white/10 px-2 py-1 rounded hover:bg-white/20 transition-colors uppercase font-bold tracking-wider"
+                      >
+                        {isPreviewMode ? <><Edit3 className="w-3 h-3" /> Edit</> : <><Eye className="w-3 h-3" /> Preview</>}
+                      </button>
                     </div>
-                    <textarea
-                      value={dayNotes[selectedDayKey] || ''}
-                      onChange={(e) => onUpdateDayNote(selectedDayKey, e.target.value)}
-                      placeholder="Write summary, thoughts or a quick to-do list for today..."
-                      className="w-full bg-white/5 border border-white/5 rounded-2xl p-4 text-xs min-h-[120px] outline-none focus:ring-1 focus:ring-white/20 transition-all placeholder:text-white/10 leading-relaxed resize-none"
-                    />
+                    {isPreviewMode ? (
+                      <div className="w-full bg-white/5 border border-white/5 rounded-2xl p-4 min-h-[140px] max-h-[250px] overflow-y-auto">
+                        <Markdown content={dayNotes[selectedDayKey] || ''} className="text-sm opacity-90" />
+                        {!(dayNotes[selectedDayKey]?.trim()) && <div className="text-white/20 italic text-xs">Empty note...</div>}
+                      </div>
+                    ) : (
+                      <textarea
+                        value={dayNotes[selectedDayKey] || ''}
+                        onChange={(e) => onUpdateDayNote(selectedDayKey, e.target.value)}
+                        placeholder="Supports Markdown: - lists, *bold*, etc..."
+                        className="w-full bg-white/5 border border-white/5 rounded-2xl p-4 text-xs min-h-[140px] outline-none focus:ring-1 focus:ring-white/20 transition-all placeholder:text-white/10 leading-relaxed resize-none"
+                      />
+                    )}
                  </div>
 
                  {/* Active Projects Check */}
@@ -267,7 +298,7 @@ export const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({
               </div>
 
               <div className="mt-8 pt-4 border-t border-white/5 text-[10px] text-white/20 flex justify-between items-center italic">
-                 <span>Agenda entries auto-save</span>
+                 <span>Auto-saves. Markdown lists supported.</span>
                  <span>Target: {settings.dailyPomodoroTarget} Sessions</span>
               </div>
            </div>
