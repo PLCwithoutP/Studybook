@@ -1,11 +1,16 @@
+
 import React, { useState, useMemo } from 'react';
 import { AppSessionLog, Project, AppSettings } from '../types';
-import { ChevronLeft, ChevronRight, X, CheckCircle, Target } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, CheckCircle, Target, FileText, Clock } from 'lucide-react';
 
 interface MonthlyCalendarProps {
   history: AppSessionLog[];
   projects: Project[];
   settings: AppSettings;
+  dayNotes: Record<string, string>;
+  onUpdateDayNote: (date: string, note: string) => void;
+  dayAgendas: Record<string, Record<string, string>>;
+  onUpdateDayAgenda: (date: string, hour: string, text: string) => void;
 }
 
 const DOT_COLORS = [
@@ -15,7 +20,17 @@ const DOT_COLORS = [
   '#f472b6', '#fb7185'
 ];
 
-export const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({ history, projects, settings }) => {
+const HOURS = Array.from({ length: 16 }, (_, i) => `${(i + 8).toString().padStart(2, '0')}:00`);
+
+export const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({ 
+  history, 
+  projects, 
+  settings, 
+  dayNotes, 
+  onUpdateDayNote,
+  dayAgendas,
+  onUpdateDayAgenda
+}) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
 
@@ -82,7 +97,11 @@ export const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({ history, proje
 
   const monthName = currentDate.toLocaleString('default', { month: 'long', year: 'numeric' });
 
-  // Projects starting on selected day and not finished
+  const selectedDayKey = useMemo(() => {
+    if (selectedDay === null) return null;
+    return new Date(currentDate.getFullYear(), currentDate.getMonth(), selectedDay).toDateString();
+  }, [selectedDay, currentDate]);
+
   const selectedDayDetail = useMemo(() => {
     if (selectedDay === null) return null;
     const selDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), selectedDay);
@@ -128,6 +147,11 @@ export const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({ history, proje
           const dateStringHistory = dateObj.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
           const focusMins = historyMap[dateStringHistory] || 0;
           const dots = projectsByDay[dateKey] || [];
+          
+          // Fix: Ensure 'v' is treated as a string to avoid 'unknown' type error on .trim()
+          const hasAgenda = dayAgendas[dateKey] && Object.values(dayAgendas[dateKey]).some((v) => (v as string).trim() !== '');
+          const hasNote = !!dayNotes[dateKey]?.trim();
+          const showsIcon = hasAgenda || hasNote;
 
           return (
             <div 
@@ -139,14 +163,15 @@ export const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({ history, proje
             >
               <div className="flex justify-between items-start">
                  <span className={`text-lg font-bold ${isToday ? 'text-white' : 'opacity-40'}`}>{day}</span>
-                 {isToday && <span className="text-[10px] bg-white text-rose-500 font-bold px-1.5 rounded-full uppercase tracking-tighter">Today</span>}
+                 <div className="flex gap-1">
+                    {showsIcon && <FileText className="w-3 h-3 text-blue-300 opacity-60" />}
+                    {isToday && <span className="text-[10px] bg-white text-rose-500 font-bold px-1.5 rounded-full uppercase tracking-tighter">Today</span>}
+                 </div>
               </div>
               
               {/* Focus Bar */}
               {focusMins > 0 && (
-                <div 
-                  className="absolute bottom-6 right-2 left-2 h-1 rounded-full bg-white/40 overflow-hidden"
-                >
+                <div className="absolute bottom-6 right-2 left-2 h-1 rounded-full bg-white/40 overflow-hidden">
                   <div className="h-full bg-white shadow-[0_0_8px_white]" style={{ width: `${Math.min(100, (focusMins/480)*100)}%` }} />
                 </div>
               )}
@@ -158,7 +183,6 @@ export const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({ history, proje
                     key={`${dot.id}-${dIdx}`} 
                     className="w-1.5 h-1.5 rounded-full shadow-sm"
                     style={{ backgroundColor: dot.color }}
-                    title="Project Active"
                   />
                 ))}
               </div>
@@ -174,38 +198,77 @@ export const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({ history, proje
         })}
       </div>
 
-      {/* Selected Day Detail Window */}
-      {selectedDay !== null && (
-        <div className="absolute z-50 top-24 right-0 w-72 animate-fade-in-up">
-           <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-3xl p-5 shadow-2xl text-white">
-              <div className="flex justify-between items-center mb-4">
-                 <h4 className="font-bold flex items-center gap-2">
-                    <Target className="w-4 h-4 text-yellow-400" /> 
-                    {new Date(currentDate.getFullYear(), currentDate.getMonth(), selectedDay).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+      {/* Expanded Day Detail Window */}
+      {selectedDay !== null && selectedDayKey && (
+        <div className="absolute z-50 top-16 right-0 w-[400px] animate-fade-in-up">
+           <div className="bg-gray-900/95 backdrop-blur-2xl border border-white/20 rounded-[2rem] p-6 shadow-2xl text-white">
+              <div className="flex justify-between items-center mb-6">
+                 <h4 className="text-xl font-bold flex items-center gap-2">
+                    <Target className="w-5 h-5 text-yellow-400" /> 
+                    {new Date(currentDate.getFullYear(), currentDate.getMonth(), selectedDay).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}
                  </h4>
-                 <button onClick={() => setSelectedDay(null)} className="p-1 hover:bg-white/10 rounded-full transition-colors"><X className="w-4 h-4" /></button>
+                 <button onClick={() => setSelectedDay(null)} className="p-2 hover:bg-white/10 rounded-full transition-colors"><X className="w-5 h-5" /></button>
               </div>
               
-              <div className="space-y-4">
-                 <div className="text-xs uppercase tracking-widest text-white/40 font-bold">New Projects</div>
-                 {selectedDayDetail && selectedDayDetail.length > 0 ? (
-                   selectedDayDetail.map(p => (
-                     <div key={p.id} className="bg-white/5 p-3 rounded-xl border border-white/5 flex items-center gap-3">
-                        <div className="w-2 h-8 rounded-full" style={{ backgroundColor: projectColorMap[p.id] }} />
-                        <div className="flex-1 min-w-0">
-                           <div className="text-sm font-bold truncate">{p.name}</div>
-                           <div className="text-[10px] opacity-50">{p.subtasks.length} subtasks</div>
-                        </div>
-                        <CheckCircle className="w-4 h-4 text-white/20" />
-                     </div>
-                   ))
-                 ) : (
-                   <div className="text-sm text-white/30 italic py-2">No projects started on this day.</div>
-                 )}
+              <div className="space-y-6">
+                 {/* Hourly Agenda Section */}
+                 <div>
+                    <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] text-white/40 font-bold mb-4">
+                      <Clock className="w-3 h-3" /> Hourly Agenda
+                    </div>
+                    <div className="max-h-60 overflow-y-auto pr-2 space-y-2 scrollbar-thin scrollbar-thumb-white/10">
+                       {HOURS.map(hour => (
+                         <div key={hour} className="flex items-center gap-3">
+                            <span className="text-[10px] font-mono opacity-40 w-10">{hour}</span>
+                            <input 
+                              type="text"
+                              value={dayAgendas[selectedDayKey]?.[hour] || ''}
+                              onChange={(e) => onUpdateDayAgenda(selectedDayKey, hour, e.target.value)}
+                              placeholder="..."
+                              className="flex-1 bg-white/5 border border-white/5 rounded-lg px-3 py-1.5 text-xs outline-none focus:bg-white/10 focus:border-white/20 transition-all placeholder:text-white/10"
+                            />
+                         </div>
+                       ))}
+                    </div>
+                 </div>
+
+                 {/* General Notes Section */}
+                 <div>
+                    <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] text-white/40 font-bold mb-3">
+                      <FileText className="w-3 h-3" /> General Day Description
+                    </div>
+                    <textarea
+                      value={dayNotes[selectedDayKey] || ''}
+                      onChange={(e) => onUpdateDayNote(selectedDayKey, e.target.value)}
+                      placeholder="Write summary, thoughts or a quick to-do list for today..."
+                      className="w-full bg-white/5 border border-white/5 rounded-2xl p-4 text-xs min-h-[120px] outline-none focus:ring-1 focus:ring-white/20 transition-all placeholder:text-white/10 leading-relaxed resize-none"
+                    />
+                 </div>
+
+                 {/* Active Projects Check */}
+                 <div className="pt-4 border-t border-white/10">
+                    <div className="text-[10px] uppercase tracking-[0.2em] text-white/40 font-bold mb-3">Projects Starting Today</div>
+                    {selectedDayDetail && selectedDayDetail.length > 0 ? (
+                      <div className="space-y-2">
+                        {selectedDayDetail.map(p => (
+                          <div key={p.id} className="bg-white/5 p-3 rounded-xl border border-white/5 flex items-center gap-3">
+                              <div className="w-1 h-6 rounded-full" style={{ backgroundColor: projectColorMap[p.id] }} />
+                              <div className="flex-1 min-w-0">
+                                <div className="text-xs font-bold truncate">{p.name}</div>
+                              </div>
+                              <CheckCircle className="w-4 h-4 text-white/10" />
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-[10px] text-white/20 italic">No new projects.</div>
+                    )}
+                 </div>
               </div>
 
-              <div className="mt-6 pt-4 border-t border-white/10 text-[10px] text-white/40">
-                 Estimated focus sessions for this day: {settings.dailyPomodoroTarget}
+              <div className="mt-8 pt-4 border-t border-white/5 text-[10px] text-white/20 flex justify-between items-center italic">
+                 <span>Agenda entries auto-save</span>
+                 <span>Target: {settings.dailyPomodoroTarget} Sessions</span>
               </div>
            </div>
         </div>

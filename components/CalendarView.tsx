@@ -12,11 +12,25 @@ interface CalendarViewProps {
   settings: AppSettings;
   activeProjectId: string | null;
   onProjectSelect: (id: string) => void;
+  dayNotes: Record<string, string>;
+  onUpdateDayNote: (date: string, note: string) => void;
+  dayAgendas: Record<string, Record<string, string>>;
+  onUpdateDayAgenda: (date: string, hour: string, text: string) => void;
 }
 
 type Tab = 'agenda' | 'progress' | 'gantt' | 'matrix';
 
-export const CalendarView: React.FC<CalendarViewProps> = ({ history, projects, settings, activeProjectId, onProjectSelect }) => {
+export const CalendarView: React.FC<CalendarViewProps> = ({ 
+  history, 
+  projects, 
+  settings, 
+  activeProjectId, 
+  onProjectSelect, 
+  dayNotes, 
+  onUpdateDayNote,
+  dayAgendas,
+  onUpdateDayAgenda
+}) => {
   const [activeTab, setActiveTab] = useState<Tab>('agenda');
 
   return (
@@ -53,7 +67,17 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ history, projects, s
       </div>
 
       <div className="animate-fade-in min-h-[400px]">
-        {activeTab === 'agenda' && <MonthlyCalendar history={history} projects={projects} settings={settings} />}
+        {activeTab === 'agenda' && (
+          <MonthlyCalendar 
+            history={history} 
+            projects={projects} 
+            settings={settings} 
+            dayNotes={dayNotes}
+            onUpdateDayNote={onUpdateDayNote}
+            dayAgendas={dayAgendas}
+            onUpdateDayAgenda={onUpdateDayAgenda}
+          />
+        )}
         {activeTab === 'matrix' && <EisenhowerMatrix projects={projects} activeProjectId={activeProjectId} onProjectSelect={onProjectSelect} />}
         {activeTab === 'progress' && <GanttChart projects={projects} />}
         {activeTab === 'gantt' && <GanttTimeline projects={projects} settings={settings} />}

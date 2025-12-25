@@ -5,6 +5,7 @@ export type Urgency = 'emergent' | 'not-emergent';
 export interface Subtask {
   id: string;
   name: string;
+  description?: string;
   targetSessions: number;
   completedSessions: number;
   importance: Importance;
@@ -14,6 +15,7 @@ export interface Subtask {
 export interface Project {
   id: string;
   name: string;
+  description?: string;
   subtasks: Subtask[];
   createdAt: string;
 }
@@ -42,6 +44,8 @@ export interface AppSettings {
 export interface AppData {
   projects: Project[];
   appHistory: AppSessionLog[];
+  dayNotes?: Record<string, string>; // date string -> general description
+  dayAgendas?: Record<string, Record<string, string>>; // date string -> { "08:00": "text", ... }
   settings?: AppSettings;
 }
 

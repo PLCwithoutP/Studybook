@@ -6,7 +6,7 @@ import { Modal } from './components/Modal';
 import { AppSessionTimer } from './components/AppSessionTimer';
 import { PerformanceGraph } from './components/PerformanceGraph';
 import { CalendarView } from './components/CalendarView';
-import { Trash2, Plus, Minus, SkipForward, Menu, Download, Upload, Book, Settings, Target, BarChart3, ArrowLeft, RotateCcw, Calendar as CalendarIcon, Edit2 } from 'lucide-react';
+import { Trash2, Plus, Minus, SkipForward, Menu, Download, Upload, Book, Settings, Target, BarChart3, ArrowLeft, RotateCcw, Calendar as CalendarIcon, Edit2, ChevronDown, ChevronUp } from 'lucide-react';
 
 const DEFAULT_SETTINGS: AppSettings = {
   durations: {
@@ -27,6 +27,8 @@ const DEFAULT_SETTINGS: AppSettings = {
 const App: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [appHistory, setAppHistory] = useState<AppSessionLog[]>([]);
+  const [dayNotes, setDayNotes] = useState<Record<string, string>>({});
+  const [dayAgendas, setDayAgendas] = useState<Record<string, Record<string, string>>>({});
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [activeSubtaskId, setActiveSubtaskId] = useState<string | null>(null);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
@@ -41,15 +43,18 @@ const App: React.FC = () => {
   const [isEditSubtaskModalOpen, setIsEditSubtaskModalOpen] = useState(false);
   const [isPerformanceViewOpen, setIsPerformanceViewOpen] = useState(false);
   const [isCalendarViewOpen, setIsCalendarViewOpen] = useState(false);
+  const [expandedSubtasks, setExpandedSubtasks] = useState<Set<string>>(new Set());
   
   const [newProjectName, setNewProjectName] = useState('');
-  const [newSubtasks, setNewSubtasks] = useState<{name: string, target: number, importance: Importance, urgency: Urgency}[]>([
-    {name: '', target: 1, importance: 'not-important', urgency: 'not-emergent'}
+  const [newProjectDesc, setNewProjectDesc] = useState('');
+  const [newSubtasks, setNewSubtasks] = useState<{name: string, description: string, target: number, importance: Importance, urgency: Urgency}[]>([
+    {name: '', description: '', target: 1, importance: 'not-important', urgency: 'not-emergent'}
   ]);
   
   const [editingSubtask, setEditingSubtask] = useState<Subtask | null>(null);
   const [subtaskForm, setSubtaskForm] = useState({
     name: '',
+    description: '',
     target: 1,
     importance: 'not-important' as Importance,
     urgency: 'not-emergent' as Urgency
@@ -129,10 +134,12 @@ const App: React.FC = () => {
     const newProject: Project = {
       id: generateId(),
       name: newProjectName,
+      description: newProjectDesc,
       createdAt: new Date().toISOString(),
       subtasks: newSubtasks.filter(st => st.name.trim() !== '').map(st => ({
         id: generateId(), 
         name: st.name, 
+        description: st.description,
         targetSessions: st.target, 
         completedSessions: 0,
         importance: st.importance,
@@ -141,7 +148,8 @@ const App: React.FC = () => {
     };
     setProjects(prev => [...prev, newProject]);
     setNewProjectName('');
-    setNewSubtasks([{name: '', target: 1, importance: 'not-important', urgency: 'not-emergent'}]);
+    setNewProjectDesc('');
+    setNewSubtasks([{name: '', description: '', target: 1, importance: 'not-important', urgency: 'not-emergent'}]);
     setIsAddProjectModalOpen(false);
     if (!selectedProjectId) setSelectedProjectId(newProject.id);
   };
@@ -151,6 +159,7 @@ const App: React.FC = () => {
     const newSubtask: Subtask = { 
       id: generateId(), 
       name: subtaskForm.name, 
+      description: subtaskForm.description,
       targetSessions: subtaskForm.target, 
       completedSessions: 0,
       importance: subtaskForm.importance,
@@ -161,12 +170,10 @@ const App: React.FC = () => {
     setIsAddSubtaskModalOpen(false);
   };
 
-  // ROBUST UPDATE: Scan all projects for the subtask ID instead of relying on selectedProjectId
   const handleUpdateSubtask = () => {
     if (!editingSubtask || !subtaskForm.name.trim()) return;
     
     setProjects(prev => prev.map(project => {
-      // Find if this project contains the subtask we're editing
       const hasSubtask = project.subtasks.some(t => t.id === editingSubtask.id);
       if (!hasSubtask) return project;
 
@@ -175,6 +182,7 @@ const App: React.FC = () => {
         subtasks: project.subtasks.map(t => t.id === editingSubtask.id ? {
           ...t,
           name: subtaskForm.name.trim(),
+          description: subtaskForm.description.trim(),
           targetSessions: subtaskForm.target,
           importance: subtaskForm.importance,
           urgency: subtaskForm.urgency
@@ -187,7 +195,7 @@ const App: React.FC = () => {
   };
 
   const resetSubtaskForm = () => {
-    setSubtaskForm({ name: '', target: 1, importance: 'not-important' as Importance, urgency: 'not-emergent' as Urgency });
+    setSubtaskForm({ name: '', description: '', target: 1, importance: 'not-important' as Importance, urgency: 'not-emergent' as Urgency });
     setEditingSubtask(null);
   };
 
@@ -195,11 +203,21 @@ const App: React.FC = () => {
     setEditingSubtask(subtask);
     setSubtaskForm({
       name: subtask.name,
+      description: subtask.description || '',
       target: subtask.targetSessions,
       importance: subtask.importance,
       urgency: subtask.urgency
     });
     setIsEditSubtaskModalOpen(true);
+  };
+
+  const toggleSubtaskExpand = (id: string) => {
+    setExpandedSubtasks(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
   const updateSessionTarget = (projectId: string, subtaskId: string, increment: number) => {
@@ -217,7 +235,13 @@ const App: React.FC = () => {
 
   const handleExport = () => {
     const todayStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
-    const dataToExport: AppData = { projects, appHistory: [...appHistory, { date: todayStr, duration: currentSessionDuration.current }], settings };
+    const dataToExport: AppData = { 
+      projects, 
+      appHistory: [...appHistory, { date: todayStr, duration: currentSessionDuration.current }], 
+      dayNotes,
+      dayAgendas,
+      settings 
+    };
     const blob = new Blob([JSON.stringify(dataToExport, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -238,6 +262,8 @@ const App: React.FC = () => {
           if (json.projects.length > 0) setSelectedProjectId(json.projects[0].id);
         }
         if (json.appHistory) setAppHistory(json.appHistory);
+        if (json.dayNotes) setDayNotes(json.dayNotes);
+        if (json.dayAgendas) setDayAgendas(json.dayAgendas);
         if (json.settings) setSettings(json.settings);
       } catch (err) { alert('Failed to parse JSON file.'); }
     };
@@ -267,6 +293,7 @@ const App: React.FC = () => {
 
   const fieldStyle = { colorScheme: 'light' } as React.CSSProperties;
   const inputClass = "w-full !bg-white !text-gray-900 border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-rose-500 outline-none transition-all placeholder:text-gray-400";
+  const textareaClass = "w-full !bg-white !text-gray-900 border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-rose-500 outline-none transition-all placeholder:text-gray-400 min-h-[100px] resize-y text-sm leading-relaxed";
   const selectClass = "w-full !bg-white !text-gray-900 border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-rose-500 outline-none transition-all";
 
   return (
@@ -292,7 +319,10 @@ const App: React.FC = () => {
               return (
                 <div key={project.id} onClick={() => { setSelectedProjectId(project.id); setIsPerformanceViewOpen(false); setIsCalendarViewOpen(false); }} className={`p-4 rounded-lg cursor-pointer transition-all border ${selectedProjectId === project.id ? 'bg-white/20 border-white/40 shadow-lg' : 'bg-white/5 border-transparent hover:bg-white/10'}`}>
                   <div className="flex justify-between items-start mb-2">
-                    <h3 className="font-semibold truncate pr-2">{project.name}</h3>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold truncate">{project.name}</h3>
+                      {project.description && <p className="text-[10px] opacity-40 truncate">{project.description}</p>}
+                    </div>
                     <button onClick={(e) => { e.stopPropagation(); if (window.confirm("Delete project?")) { setProjects(prev => prev.filter(p => p.id !== project.id)); if (selectedProjectId === project.id) setSelectedProjectId(null); } }} className="text-white/50 hover:text-white p-1"><Trash2 className="w-4 h-4" /></button>
                   </div>
                   <div className="w-full bg-black/20 rounded-full h-1.5 overflow-hidden">
@@ -334,7 +364,20 @@ const App: React.FC = () => {
                 <h2 className="text-3xl font-bold flex items-center gap-3"><CalendarIcon className="w-8 h-8" /> Studybook Agenda</h2>
                 <button onClick={() => setIsCalendarViewOpen(false)} className="flex items-center gap-2 bg-white/20 px-4 py-2 rounded-lg hover:bg-white/30 transition-colors"><ArrowLeft className="w-4 h-4" /> Back to Timer</button>
               </div>
-              <CalendarView history={appHistory} projects={projects} settings={settings} activeProjectId={selectedProjectId} onProjectSelect={setSelectedProjectId} />
+              <CalendarView 
+                history={appHistory} 
+                projects={projects} 
+                settings={settings} 
+                activeProjectId={selectedProjectId} 
+                onProjectSelect={setSelectedProjectId}
+                dayNotes={dayNotes}
+                onUpdateDayNote={(date, note) => setDayNotes(prev => ({...prev, [date]: note}))}
+                dayAgendas={dayAgendas}
+                onUpdateDayAgenda={(date, hour, text) => setDayAgendas(prev => ({
+                  ...prev,
+                  [date]: { ...(prev[date] || {}), [hour]: text }
+                }))}
+              />
             </div>
           ) : (
             <>
@@ -376,37 +419,56 @@ const App: React.FC = () => {
                      <div>
                        <h2 className="text-2xl font-bold">{selectedProject.name}</h2>
                        <div className="text-sm opacity-80 mt-1">Time Spent: {selectedProjectStats.timeSpent} <span className="mx-2">|</span> Est. Remaining: {selectedProjectStats.timeRemaining}</div>
+                       {selectedProject.description && <p className="text-xs opacity-60 italic mt-1 whitespace-pre-wrap">{selectedProject.description}</p>}
                      </div>
                      <div className="text-right"><div className="text-3xl font-mono">{selectedProjectStats.completedSessions} <span className="text-base opacity-60">/ {selectedProjectStats.totalSessions}</span></div></div>
                   </div>
                   <div className="space-y-3">
-                    {selectedProject.subtasks.map(task => (
-                      <div key={task.id} onClick={() => setActiveSubtaskId(task.id)} className={`relative p-4 rounded-xl border-l-8 cursor-pointer transition-all hover:brightness-110 ${task.completedSessions >= task.targetSessions ? 'bg-emerald-500/20 border-emerald-400' : 'bg-rose-500/10 border-rose-300' } ${activeSubtaskId === task.id ? 'ring-2 ring-white ring-offset-2 ring-offset-transparent transform scale-[1.02] shadow-xl' : ''}`}>
-                         <div className="flex flex-col gap-2">
-                            <div className="flex justify-between items-center">
-                               <span className={`font-medium text-lg ${task.completedSessions >= task.targetSessions ? 'line-through text-white/50 italic' : 'text-white'}`}>{task.name}</span>
-                               <div className="flex items-center gap-4">
-                                  <div className="font-mono text-lg font-bold">{task.completedSessions} <span className="opacity-50 text-sm">/ {task.targetSessions}</span></div>
-                                  <div className="flex items-center gap-1 bg-black/20 rounded-lg p-1">
-                                    <button onClick={(e) => { e.stopPropagation(); updateSessionTarget(selectedProject.id, task.id, -1); }} className="p-1 hover:bg-white/20 rounded transition-colors" disabled={task.targetSessions <= task.completedSessions || task.targetSessions <= 1}><Minus className="w-4 h-4" /></button>
-                                    <button onClick={(e) => { e.stopPropagation(); updateSessionTarget(selectedProject.id, task.id, 1); }} className="p-1 hover:bg-white/20 rounded transition-colors"><Plus className="w-4 h-4" /></button>
-                                  </div>
-                                  <button onClick={(e) => { e.stopPropagation(); openEditSubtask(task); }} className="p-1 hover:bg-white/20 text-white/70"><Edit2 className="w-4 h-4" /></button>
-                                  <button onClick={(e) => { e.stopPropagation(); if (window.confirm("Delete subtask?")) setProjects(prev => prev.map(p => p.id !== selectedProject.id ? p : { ...p, subtasks: p.subtasks.filter(t => t.id !== task.id) })); }} className="p-1 hover:bg-white/20 text-white/70"><Trash2 className="w-5 h-5" /></button>
-                               </div>
-                            </div>
-                            <div className="flex gap-2">
-                               <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${task.importance === 'important' ? 'bg-indigo-500 text-white' : 'bg-slate-500/50 text-white/70'}`}>
-                                 {task.importance === 'important' ? 'Important' : 'Normal'}
-                               </span>
-                               <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${task.urgency === 'emergent' ? 'bg-rose-500 text-white' : 'bg-emerald-500/50 text-white/70'}`}>
-                                 {task.urgency === 'emergent' ? 'Emergent' : 'Routine'}
-                               </span>
-                            </div>
-                         </div>
-                         {activeSubtaskId === task.id && <div className="absolute -right-2 -top-2 bg-white text-gray-900 rounded-full p-1 shadow-sm"><Target className="w-4 h-4" /></div>}
-                      </div>
-                    ))}
+                    {selectedProject.subtasks.map(task => {
+                      const isExpanded = expandedSubtasks.has(task.id);
+                      return (
+                        <div key={task.id} onClick={() => setActiveSubtaskId(task.id)} className={`relative p-4 rounded-xl border-l-8 cursor-pointer transition-all hover:brightness-110 ${task.completedSessions >= task.targetSessions ? 'bg-emerald-500/20 border-emerald-400' : 'bg-rose-500/10 border-rose-300' } ${activeSubtaskId === task.id ? 'ring-2 ring-white ring-offset-2 ring-offset-transparent transform scale-[1.02] shadow-xl' : ''}`}>
+                          <div className="flex flex-col gap-2">
+                              <div className="flex justify-between items-center">
+                                <div className="flex items-center gap-2 overflow-hidden flex-1">
+                                  <span className={`font-medium text-lg truncate ${task.completedSessions >= task.targetSessions ? 'line-through text-white/50 italic' : 'text-white'}`}>{task.name}</span>
+                                  {task.description && (
+                                    <button 
+                                      onClick={(e) => { e.stopPropagation(); toggleSubtaskExpand(task.id); }}
+                                      className="p-1 hover:bg-white/10 rounded-md transition-colors"
+                                    >
+                                      {isExpanded ? <ChevronUp className="w-4 h-4 text-white/40" /> : <ChevronDown className="w-4 h-4 text-white/40" />}
+                                    </button>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-4 shrink-0">
+                                    <div className="font-mono text-lg font-bold">{task.completedSessions} <span className="opacity-50 text-sm">/ {task.targetSessions}</span></div>
+                                    <div className="flex items-center gap-1 bg-black/20 rounded-lg p-1">
+                                      <button onClick={(e) => { e.stopPropagation(); updateSessionTarget(selectedProject.id, task.id, -1); }} className="p-1 hover:bg-white/20 rounded transition-colors" disabled={task.targetSessions <= task.completedSessions || task.targetSessions <= 1}><Minus className="w-4 h-4" /></button>
+                                      <button onClick={(e) => { e.stopPropagation(); updateSessionTarget(selectedProject.id, task.id, 1); }} className="p-1 hover:bg-white/20 rounded transition-colors"><Plus className="w-4 h-4" /></button>
+                                    </div>
+                                    <button onClick={(e) => { e.stopPropagation(); openEditSubtask(task); }} className="p-1 hover:bg-white/20 text-white/70"><Edit2 className="w-4 h-4" /></button>
+                                    <button onClick={(e) => { e.stopPropagation(); if (window.confirm("Delete subtask?")) setProjects(prev => prev.map(p => p.id !== selectedProject.id ? p : { ...p, subtasks: p.subtasks.filter(t => t.id !== task.id) })); }} className="p-1 hover:bg-white/20 text-white/70"><Trash2 className="w-5 h-5" /></button>
+                                </div>
+                              </div>
+                              {isExpanded && task.description && (
+                                <div className="mt-1 text-xs text-white/70 bg-black/10 p-3 rounded-lg border border-white/5 whitespace-pre-wrap leading-relaxed animate-fade-in">
+                                  {task.description}
+                                </div>
+                              )}
+                              <div className="flex gap-2">
+                                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${task.importance === 'important' ? 'bg-indigo-500 text-white' : 'bg-slate-500/50 text-white/70'}`}>
+                                  {task.importance === 'important' ? 'Important' : 'Normal'}
+                                </span>
+                                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${task.urgency === 'emergent' ? 'bg-rose-500 text-white' : 'bg-emerald-500/50 text-white/70'}`}>
+                                  {task.urgency === 'emergent' ? 'Emergent' : 'Routine'}
+                                </span>
+                              </div>
+                          </div>
+                          {activeSubtaskId === task.id && <div className="absolute -right-2 -top-2 bg-white text-gray-900 rounded-full p-1 shadow-sm"><Target className="w-4 h-4" /></div>}
+                        </div>
+                      );
+                    })}
                   </div>
                   <button onClick={() => { resetSubtaskForm(); setIsAddSubtaskModalOpen(true); }} className="w-full py-3 mt-4 border-2 border-dashed border-white/20 rounded-xl hover:bg-white/10 text-white/70 flex items-center justify-center gap-2 transition-colors font-medium"><Plus className="w-5 h-5" /> Add Subtask</button>
                 </div>
@@ -459,6 +521,12 @@ const App: React.FC = () => {
       <Modal isOpen={isAddProjectModalOpen} onClose={() => setIsAddProjectModalOpen(false)} title="New Project">
         <div className="space-y-4 text-gray-800">
            <input type="text" style={fieldStyle} value={newProjectName} onChange={(e) => setNewProjectName(e.target.value)} placeholder="Project Name" className={inputClass} />
+           <div className="space-y-1">
+             <label className="text-[10px] font-bold text-gray-400 uppercase">Project Itemized Notes</label>
+             <textarea style={fieldStyle} value={newProjectDesc} onChange={(e) => setNewProjectDesc(e.target.value)} placeholder="- List point 1&#10;- List point 2..." className={textareaClass} />
+           </div>
+           
+           <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-6">Subtasks</div>
            <div className="space-y-4 max-h-64 overflow-y-auto pr-2">
              {newSubtasks.map((st, idx) => (
                <div key={idx} className="p-3 border rounded-xl bg-gray-50 space-y-2">
@@ -467,6 +535,7 @@ const App: React.FC = () => {
                    <input type="number" style={fieldStyle} value={st.target} onChange={(e) => { const copy = [...newSubtasks]; copy[idx] = { ...copy[idx], target: parseInt(e.target.value) || 1 }; setNewSubtasks(copy); }} className={inputClass + " w-16 text-center"} />
                    <button onClick={() => setNewSubtasks(newSubtasks.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
                  </div>
+                 <textarea style={fieldStyle} value={st.description} onChange={(e) => { const copy = [...newSubtasks]; copy[idx] = { ...copy[idx], description: e.target.value }; setNewSubtasks(copy); }} placeholder="Subtask itemized notes..." className={textareaClass + " !min-h-[60px]"} />
                  <div className="flex gap-2">
                     <select style={fieldStyle} value={st.importance} onChange={(e) => { const copy = [...newSubtasks]; copy[idx] = { ...copy[idx], importance: e.target.value as Importance }; setNewSubtasks(copy); }} className={selectClass}>
                        <option value="important">Important</option>
@@ -480,7 +549,7 @@ const App: React.FC = () => {
                </div>
              ))}
            </div>
-           <button onClick={() => setNewSubtasks([...newSubtasks, {name: '', target: 1, importance: 'not-important', urgency: 'not-emergent'}])} className="text-rose-500 text-sm font-medium flex items-center gap-1"><Plus className="w-4 h-4" /> Add Another Subtask</button>
+           <button onClick={() => setNewSubtasks([...newSubtasks, {name: '', description: '', target: 1, importance: 'not-important', urgency: 'not-emergent'}])} className="text-rose-500 text-sm font-medium flex items-center gap-1"><Plus className="w-4 h-4" /> Add Another Subtask</button>
            <div className="flex justify-end pt-4"><Button onClick={handleAddProject}>Create Project</Button></div>
         </div>
       </Modal>
@@ -491,9 +560,13 @@ const App: React.FC = () => {
              <label className="text-xs font-bold text-gray-400 uppercase">Name</label>
              <input type="text" style={fieldStyle} value={subtaskForm.name} onChange={(e) => setSubtaskForm({...subtaskForm, name: e.target.value})} placeholder="What needs to be done?" className={inputClass} />
            </div>
+           <div className="space-y-1">
+             <label className="text-xs font-bold text-gray-400 uppercase">Itemized Notes</label>
+             <textarea style={fieldStyle} value={subtaskForm.description} onChange={(e) => setSubtaskForm({...subtaskForm, description: e.target.value})} placeholder="- Detailed task 1&#10;- Requirement 2..." className={textareaClass} />
+           </div>
            <div className="grid grid-cols-2 gap-4">
              <div className="space-y-1">
-               <label className="text-xs font-bold text-gray-400 uppercase">Target Pomodoros</label>
+               <label className="text-xs font-bold text-gray-400 uppercase">Target Sessions</label>
                <input type="number" min="1" style={fieldStyle} value={subtaskForm.target} onChange={(e) => setSubtaskForm({...subtaskForm, target: parseInt(e.target.value) || 1})} className={inputClass} />
              </div>
              <div className="space-y-1">
@@ -520,6 +593,10 @@ const App: React.FC = () => {
            <div className="space-y-1">
              <label className="text-xs font-bold text-gray-400 uppercase">Name</label>
              <input type="text" style={fieldStyle} value={subtaskForm.name} onChange={(e) => setSubtaskForm({...subtaskForm, name: e.target.value})} placeholder="Task name" className={inputClass} />
+           </div>
+           <div className="space-y-1">
+             <label className="text-xs font-bold text-gray-400 uppercase">Itemized Notes</label>
+             <textarea style={fieldStyle} value={subtaskForm.description} onChange={(e) => setSubtaskForm({...subtaskForm, description: e.target.value})} placeholder="- Edit points..." className={textareaClass} />
            </div>
            <div className="grid grid-cols-2 gap-4">
              <div className="space-y-1">
