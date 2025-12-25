@@ -12,6 +12,7 @@ interface MonthlyCalendarProps {
   onUpdateDayNote: (date: string, note: string) => void;
   dayAgendas: Record<string, Record<string, string>>;
   onUpdateDayAgenda: (date: string, hour: string, text: string) => void;
+  onActivateProject: (id: string) => void;
 }
 
 const DOT_COLORS = [
@@ -45,7 +46,8 @@ export const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({
   dayNotes, 
   onUpdateDayNote,
   dayAgendas,
-  onUpdateDayAgenda
+  onUpdateDayAgenda,
+  onActivateProject
 }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
@@ -84,7 +86,7 @@ export const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({
   }, [history]);
 
   const projectsByDay = useMemo(() => {
-    const spans: { [date: string]: { id: string, color: string }[] } = {};
+    const spans: { [date: string]: { id: string, name: string, color: string }[] } = {};
     const dailyTarget = settings.dailyPomodoroTarget || 6;
 
     projects.forEach(p => {
@@ -101,7 +103,7 @@ export const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({
         d.setDate(start.getDate() + i);
         const dateKey = d.toDateString();
         if (!spans[dateKey]) spans[dateKey] = [];
-        spans[dateKey].push({ id: p.id, color: projectColorMap[p.id] });
+        spans[dateKey].push({ id: p.id, name: p.name, color: projectColorMap[p.id] });
       }
     });
     return spans;
@@ -125,27 +127,13 @@ export const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({
   }, [selectedDayKey, dayAgendas]);
 
   const hasAnyAgendaEntries = useMemo(() => {
-    // FIX: Explicitly cast 'v' to string because Object.values might return unknown[] depending on TS config
     return Object.values(agendaForSelectedDay).some((v) => (v as string).trim() !== '');
   }, [agendaForSelectedDay]);
 
-  const selectedDayDetail = useMemo(() => {
-    if (selectedDay === null) return null;
-    const selDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), selectedDay);
-    selDate.setHours(0, 0, 0, 0);
-    
-    return projects.filter(p => {
-      const pDate = new Date(p.createdAt);
-      pDate.setHours(0, 0, 0, 0);
-      
-      const isSameDay = pDate.getTime() === selDate.getTime();
-      const totalTarget = p.subtasks.reduce((sum, s) => sum + s.targetSessions, 0);
-      const totalDone = p.subtasks.reduce((sum, s) => sum + s.completedSessions, 0);
-      const isNotFinished = totalDone < totalTarget;
-
-      return isSameDay && isNotFinished;
-    });
-  }, [selectedDay, currentDate, projects]);
+  const projectsOnSelectedDay = useMemo(() => {
+    if (!selectedDayKey) return [];
+    return projectsByDay[selectedDayKey] || [];
+  }, [selectedDayKey, projectsByDay]);
 
   const toggleDay = (day: number) => {
     setSelectedDay(day);
@@ -232,7 +220,7 @@ export const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({
       {/* Expanded Day Detail Window */}
       {selectedDay !== null && selectedDayKey && (
         <div className="absolute z-50 top-16 right-0 w-[420px] animate-fade-in-up">
-           <div className={`backdrop-blur-3xl border border-white/20 rounded-[2.5rem] p-8 shadow-2xl text-white transition-all duration-300 ${isEditing ? 'bg-gray-900/95' : 'bg-white/10'}`}>
+           <div className={`backdrop-blur-3xl border border-white/20 rounded-[2.5rem] p-8 shadow-2xl text-white transition-all duration-300 ${isEditing ? 'bg-gray-900/95' : 'bg-white/10 bg-opacity-40'}`}>
               <div className="flex justify-between items-start mb-8">
                  <div>
                     <h4 className="text-2xl font-bold flex items-center gap-3">
@@ -276,16 +264,18 @@ export const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({
                           ))}
                        </div>
                     ) : (
-                       <div className="space-y-3">
+                       <div className="space-y-4">
                           {hasAnyAgendaEntries ? (
-                             HOURS.filter(h => agendaForSelectedDay[h]?.trim()).map(hour => (
-                                <div key={hour} className="flex items-start gap-4 animate-fade-in group">
-                                   <span className="text-[10px] font-mono opacity-30 w-10 shrink-0 mt-1">{hour}</span>
-                                   <div className="flex-1 text-sm font-medium text-white/80 group-hover:text-white transition-colors">
-                                      {agendaForSelectedDay[hour]}
+                             <div className="space-y-3">
+                                {HOURS.filter(h => agendaForSelectedDay[h]?.trim()).map(hour => (
+                                   <div key={hour} className="flex items-start gap-5 animate-fade-in group">
+                                      <span className="text-[11px] font-mono opacity-40 w-10 shrink-0 mt-1">{hour}</span>
+                                      <div className="flex-1 text-sm font-medium text-white/70 group-hover:text-white transition-colors">
+                                         {agendaForSelectedDay[hour]}
+                                      </div>
                                    </div>
-                                </div>
-                             ))
+                                ))}
+                             </div>
                           ) : (
                              <div className="text-xs italic text-white/20 py-2">No agenda items for this day.</div>
                           )}
@@ -310,7 +300,7 @@ export const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({
                     ) : (
                       <div className="w-full">
                         {dayNotes[selectedDayKey]?.trim() ? (
-                          <Markdown content={dayNotes[selectedDayKey]} className="text-sm opacity-90 leading-relaxed" />
+                          <Markdown content={dayNotes[selectedDayKey]} className="text-sm opacity-60 leading-relaxed" />
                         ) : (
                           <div className="text-xs italic text-white/20">No description provided.</div>
                         )}
@@ -318,16 +308,20 @@ export const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({
                     )}
                  </div>
 
-                 {/* Projects Footer */}
-                 {!isEditing && selectedDayDetail && selectedDayDetail.length > 0 && (
+                 {/* Active Projects Check */}
+                 {!isEditing && projectsOnSelectedDay.length > 0 && (
                     <div className="pt-6 border-t border-white/10 animate-fade-in">
-                       <div className="text-[10px] uppercase tracking-[0.2em] text-white/40 font-bold mb-4">Projects Created Today</div>
+                       <div className="text-[10px] uppercase tracking-[0.2em] text-white/40 font-bold mb-4">Active Projects</div>
                        <div className="grid grid-cols-1 gap-2">
-                         {selectedDayDetail.map(p => (
-                           <div key={p.id} className="bg-white/5 p-3 rounded-2xl border border-white/5 flex items-center gap-3 hover:bg-white/10 transition-colors">
-                               <div className="w-1 h-6 rounded-full" style={{ backgroundColor: projectColorMap[p.id] }} />
-                               <div className="text-xs font-bold truncate flex-1">{p.name}</div>
-                               <CheckCircle className="w-4 h-4 text-white/10" />
+                         {projectsOnSelectedDay.map(p => (
+                           <div 
+                             key={p.id} 
+                             onClick={() => onActivateProject(p.id)}
+                             className="bg-white/5 p-3 rounded-2xl border border-white/5 flex items-center gap-3 hover:bg-white/10 hover:border-white/20 transition-all cursor-pointer group"
+                           >
+                               <div className="w-1.5 h-6 rounded-full" style={{ backgroundColor: p.color }} />
+                               <div className="text-xs font-bold truncate flex-1 group-hover:text-white text-white/80">{p.name}</div>
+                               <CheckCircle className="w-4 h-4 text-white/10 group-hover:text-white/40 transition-colors" />
                            </div>
                          ))}
                        </div>

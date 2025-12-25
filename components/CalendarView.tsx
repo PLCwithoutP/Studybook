@@ -76,6 +76,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             onUpdateDayNote={onUpdateDayNote}
             dayAgendas={dayAgendas}
             onUpdateDayAgenda={onUpdateDayAgenda}
+            onActivateProject={onProjectSelect}
           />
         )}
         {activeTab === 'matrix' && <EisenhowerMatrix projects={projects} activeProjectId={activeProjectId} onProjectSelect={onProjectSelect} />}

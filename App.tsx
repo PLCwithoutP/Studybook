@@ -172,6 +172,12 @@ const App: React.FC = () => {
     if (!selectedProjectId) setSelectedProjectId(newProject.id);
   };
 
+  const handleActivateProject = (id: string) => {
+    setSelectedProjectId(id);
+    setIsCalendarViewOpen(false);
+    setIsPerformanceViewOpen(false);
+  };
+
   const handleAddSubtask = () => {
     if (!selectedProjectId || !subtaskForm.name.trim()) return;
     const newSubtask: Subtask = { 
@@ -387,7 +393,7 @@ const App: React.FC = () => {
                 projects={projects} 
                 settings={settings} 
                 activeProjectId={selectedProjectId} 
-                onProjectSelect={setSelectedProjectId}
+                onProjectSelect={handleActivateProject}
                 dayNotes={dayNotes}
                 onUpdateDayNote={(date, note) => setDayNotes(prev => ({...prev, [date]: note}))}
                 dayAgendas={dayAgendas}
