@@ -65,8 +65,8 @@ const App: React.FC = () => {
   
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectDesc, setNewProjectDesc] = useState('');
-  const [newSubtasks, setNewSubtasks] = useState<{name: string, description: string, target: number, importance: Importance, urgency: Urgency}[]>([
-    {name: '', description: '', target: 1, importance: 'not-important', urgency: 'not-emergent'}
+  const [newSubtasks, setNewSubtasks] = useState<{name: string, description: string, target: number, importance: Importance | '', urgency: Urgency | ''}[]>([
+    {name: '', description: '', target: 1, importance: '', urgency: ''}
   ]);
   
   const [editingSubtask, setEditingSubtask] = useState<Subtask | null>(null);
@@ -74,8 +74,8 @@ const App: React.FC = () => {
     name: '',
     description: '',
     target: 1,
-    importance: 'not-important' as Importance,
-    urgency: 'not-emergent' as Urgency
+    importance: '' as Importance | '',
+    urgency: '' as Urgency | ''
   });
 
   const currentSessionDuration = useRef<string>("00:00:00");
@@ -149,6 +149,14 @@ const App: React.FC = () => {
 
   const handleAddProject = () => {
     if (!newProjectName.trim()) return;
+    
+    // Validate all subtasks have importance and urgency
+    const hasInvalidSubtasks = newSubtasks.some(st => st.name.trim() !== '' && (st.importance === '' || st.urgency === ''));
+    if (hasInvalidSubtasks) {
+      alert("Please select Importance and Urgency for all items.");
+      return;
+    }
+
     const newProject: Project = {
       id: generateId(),
       name: newProjectName,
@@ -160,14 +168,14 @@ const App: React.FC = () => {
         description: st.description,
         targetSessions: st.target, 
         completedSessions: 0,
-        importance: st.importance,
-        urgency: st.urgency
+        importance: st.importance as Importance,
+        urgency: st.urgency as Urgency
       }))
     };
     setProjects(prev => [...prev, newProject]);
     setNewProjectName('');
     setNewProjectDesc('');
-    setNewSubtasks([{name: '', description: '', target: 1, importance: 'not-important', urgency: 'not-emergent'}]);
+    setNewSubtasks([{name: '', description: '', target: 1, importance: '', urgency: ''}]);
     setIsAddProjectModalOpen(false);
     if (!selectedProjectId) setSelectedProjectId(newProject.id);
   };
@@ -180,14 +188,18 @@ const App: React.FC = () => {
 
   const handleAddSubtask = () => {
     if (!selectedProjectId || !subtaskForm.name.trim()) return;
+    if (!subtaskForm.importance || !subtaskForm.urgency) {
+      alert("Please select Importance and Urgency.");
+      return;
+    }
     const newSubtask: Subtask = { 
       id: generateId(), 
       name: subtaskForm.name, 
       description: subtaskForm.description,
       targetSessions: subtaskForm.target, 
       completedSessions: 0,
-      importance: subtaskForm.importance,
-      urgency: subtaskForm.urgency
+      importance: subtaskForm.importance as Importance,
+      urgency: subtaskForm.urgency as Urgency
     };
     setProjects(prev => prev.map(p => p.id !== selectedProjectId ? p : { ...p, subtasks: [...p.subtasks, newSubtask] }));
     resetSubtaskForm();
@@ -196,6 +208,10 @@ const App: React.FC = () => {
 
   const handleUpdateSubtask = () => {
     if (!editingSubtask || !subtaskForm.name.trim()) return;
+    if (!subtaskForm.importance || !subtaskForm.urgency) {
+      alert("Please select Importance and Urgency.");
+      return;
+    }
     
     setProjects(prev => prev.map(project => {
       const hasSubtask = project.subtasks.some(t => t.id === editingSubtask.id);
@@ -208,8 +224,8 @@ const App: React.FC = () => {
           name: subtaskForm.name.trim(),
           description: subtaskForm.description.trim(),
           targetSessions: subtaskForm.target,
-          importance: subtaskForm.importance,
-          urgency: subtaskForm.urgency
+          importance: subtaskForm.importance as Importance,
+          urgency: subtaskForm.urgency as Urgency
         } : t)
       };
     }));
@@ -219,18 +235,19 @@ const App: React.FC = () => {
   };
 
   const resetSubtaskForm = () => {
-    setSubtaskForm({ name: '', description: '', target: 1, importance: 'not-important' as Importance, urgency: 'not-emergent' as Urgency });
+    setSubtaskForm({ name: '', description: '', target: 1, importance: '', urgency: '' });
     setEditingSubtask(null);
   };
 
   const openEditSubtask = (subtask: Subtask) => {
     setEditingSubtask(subtask);
+    // Explicitly clearing labels when clicking edit to force user selection and avoid bugs
     setSubtaskForm({
       name: subtask.name,
       description: subtask.description || '',
       target: subtask.targetSessions,
-      importance: subtask.importance,
-      urgency: subtask.urgency
+      importance: '', 
+      urgency: ''
     });
     setIsEditSubtaskModalOpen(true);
   };
@@ -566,10 +583,12 @@ const App: React.FC = () => {
                  <textarea style={fieldStyle} value={st.description} onChange={(e) => { const copy = [...newSubtasks]; copy[idx] = { ...copy[idx], description: e.target.value }; setNewSubtasks(copy); }} placeholder="- Requirement 1..." className={textareaClass + " !min-h-[60px]"} />
                  <div className="flex gap-2">
                     <select style={fieldStyle} value={st.importance} onChange={(e) => { const copy = [...newSubtasks]; copy[idx] = { ...copy[idx], importance: e.target.value as Importance }; setNewSubtasks(copy); }} className={selectClass}>
+                       <option value="" disabled>Select Importance</option>
                        <option value="important">Important</option>
                        <option value="not-important">Normal</option>
                     </select>
                     <select style={fieldStyle} value={st.urgency} onChange={(e) => { const copy = [...newSubtasks]; copy[idx] = { ...copy[idx], urgency: e.target.value as Urgency }; setNewSubtasks(copy); }} className={selectClass}>
+                       <option value="" disabled>Select Urgency</option>
                        <option value="emergent">Emergent</option>
                        <option value="not-emergent">Routine</option>
                     </select>
@@ -577,7 +596,7 @@ const App: React.FC = () => {
                </div>
              ))}
            </div>
-           <button onClick={() => setNewSubtasks([...newSubtasks, {name: '', description: '', target: 1, importance: 'not-important', urgency: 'not-emergent'}])} className="text-rose-500 text-sm font-medium flex items-center gap-1"><Plus className="w-4 h-4" /> Add Another Subtask</button>
+           <button onClick={() => setNewSubtasks([...newSubtasks, {name: '', description: '', target: 1, importance: '', urgency: ''}])} className="text-rose-500 text-sm font-medium flex items-center gap-1"><Plus className="w-4 h-4" /> Add Another Subtask</button>
            <div className="flex justify-end pt-4"><Button onClick={handleAddProject}>Create Project</Button></div>
         </div>
       </Modal>
@@ -600,6 +619,7 @@ const App: React.FC = () => {
              <div className="space-y-1">
                <label className="text-xs font-bold text-gray-400 uppercase">Importance</label>
                <select style={fieldStyle} value={subtaskForm.importance} onChange={(e) => setSubtaskForm({...subtaskForm, importance: e.target.value as Importance})} className={selectClass}>
+                 <option value="" disabled>Select Importance</option>
                  <option value="important">Important</option>
                  <option value="not-important">Normal</option>
                </select>
@@ -608,6 +628,7 @@ const App: React.FC = () => {
            <div className="space-y-1">
              <label className="text-xs font-bold text-gray-400 uppercase">Urgency</label>
              <select style={fieldStyle} value={subtaskForm.urgency} onChange={(e) => setSubtaskForm({...subtaskForm, urgency: e.target.value as Urgency})} className={selectClass}>
+               <option value="" disabled>Select Urgency</option>
                <option value="emergent">Emergent</option>
                <option value="not-emergent">Routine</option>
              </select>
@@ -634,6 +655,7 @@ const App: React.FC = () => {
              <div className="space-y-1">
                <label className="text-xs font-bold text-gray-400 uppercase">Importance</label>
                <select style={fieldStyle} value={subtaskForm.importance} onChange={(e) => setSubtaskForm({...subtaskForm, importance: e.target.value as Importance})} className={selectClass}>
+                 <option value="" disabled>Select Importance</option>
                  <option value="important">Important</option>
                  <option value="not-important">Normal</option>
                </select>
@@ -642,6 +664,7 @@ const App: React.FC = () => {
            <div className="space-y-1">
              <label className="text-xs font-bold text-gray-400 uppercase">Urgency</label>
              <select style={fieldStyle} value={subtaskForm.urgency} onChange={(e) => setSubtaskForm({...subtaskForm, urgency: e.target.value as Urgency})} className={selectClass}>
+               <option value="" disabled>Select Urgency</option>
                <option value="emergent">Emergent</option>
                <option value="not-emergent">Routine</option>
              </select>
