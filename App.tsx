@@ -6,7 +6,7 @@ import { Modal } from './components/Modal';
 import { AppSessionTimer } from './components/AppSessionTimer';
 import { PerformanceGraph } from './components/PerformanceGraph';
 import { CalendarView } from './components/CalendarView';
-import { Trash2, Plus, Minus, SkipForward, Menu, Download, Upload, Book, Settings, Target, BarChart3, ArrowLeft, RotateCcw, Calendar as CalendarIcon, Edit2, ChevronDown, ChevronUp, Eye } from 'lucide-react';
+import { Trash2, Plus, Minus, SkipForward, Menu, Download, Upload, Book, Settings, Target, BarChart3, ArrowLeft, RotateCcw, Calendar as CalendarIcon, Edit2, ChevronDown, ChevronUp } from 'lucide-react';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 
@@ -29,7 +29,8 @@ const DEFAULT_SETTINGS: AppSettings = {
 // Markdown Helper Component
 const Markdown: React.FC<{ content: string, className?: string }> = ({ content, className = "" }) => {
   const html = useMemo(() => {
-    const rawHtml = marked.parse(content || '') as string;
+    // Synchronous parse for marked v15
+    const rawHtml = marked.parse(content || '', { breaks: true }) as string;
     return DOMPurify.sanitize(rawHtml);
   }, [content]);
 
@@ -437,8 +438,8 @@ const App: React.FC = () => {
                        <h2 className="text-2xl font-bold">{selectedProject.name}</h2>
                        <div className="text-sm opacity-80 mt-1">Time Spent: {selectedProjectStats.timeSpent} <span className="mx-2">|</span> Est. Remaining: {selectedProjectStats.timeRemaining}</div>
                        {selectedProject.description && (
-                         <div className="mt-2 p-3 bg-white/5 rounded-xl border border-white/10 shadow-sm">
-                           <Markdown content={selectedProject.description} className="text-xs text-white/80 italic" />
+                         <div className="mt-2 p-3 bg-white/5 rounded-xl border border-white/10 shadow-sm overflow-hidden">
+                           <Markdown content={selectedProject.description} className="text-xs text-white/80 italic prose-invert" />
                          </div>
                        )}
                      </div>
@@ -473,8 +474,8 @@ const App: React.FC = () => {
                                 </div>
                               </div>
                               {isExpanded && task.description && (
-                                <div className="mt-1 text-xs text-white/70 bg-black/10 p-3 rounded-lg border border-white/5 animate-fade-in">
-                                  <Markdown content={task.description} className="leading-relaxed" />
+                                <div className="mt-1 text-xs text-white/70 bg-black/10 p-3 rounded-lg border border-white/5 animate-fade-in overflow-hidden">
+                                  <Markdown content={task.description} className="leading-relaxed prose-invert" />
                                 </div>
                               )}
                               <div className="flex gap-2">
@@ -543,7 +544,7 @@ const App: React.FC = () => {
         <div className="space-y-4 text-gray-800">
            <input type="text" style={fieldStyle} value={newProjectName} onChange={(e) => setNewProjectName(e.target.value)} placeholder="Project Name" className={inputClass} />
            <div className="space-y-1">
-             <label className="text-[10px] font-bold text-gray-400 uppercase">Project Markdown Notes</label>
+             <label className="text-[10px] font-bold text-gray-400 uppercase">Project Itemized List (Markdown)</label>
              <textarea style={fieldStyle} value={newProjectDesc} onChange={(e) => setNewProjectDesc(e.target.value)} placeholder="- Item 1&#10;- Item 2..." className={textareaClass} />
            </div>
            
@@ -556,7 +557,7 @@ const App: React.FC = () => {
                    <input type="number" style={fieldStyle} value={st.target} onChange={(e) => { const copy = [...newSubtasks]; copy[idx] = { ...copy[idx], target: parseInt(e.target.value) || 1 }; setNewSubtasks(copy); }} className={inputClass + " w-16 text-center"} />
                    <button onClick={() => setNewSubtasks(newSubtasks.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
                  </div>
-                 <textarea style={fieldStyle} value={st.description} onChange={(e) => { const copy = [...newSubtasks]; copy[idx] = { ...copy[idx], description: e.target.value }; setNewSubtasks(copy); }} placeholder="Markdown notes..." className={textareaClass + " !min-h-[60px]"} />
+                 <textarea style={fieldStyle} value={st.description} onChange={(e) => { const copy = [...newSubtasks]; copy[idx] = { ...copy[idx], description: e.target.value }; setNewSubtasks(copy); }} placeholder="- Requirement 1..." className={textareaClass + " !min-h-[60px]"} />
                  <div className="flex gap-2">
                     <select style={fieldStyle} value={st.importance} onChange={(e) => { const copy = [...newSubtasks]; copy[idx] = { ...copy[idx], importance: e.target.value as Importance }; setNewSubtasks(copy); }} className={selectClass}>
                        <option value="important">Important</option>
@@ -582,7 +583,7 @@ const App: React.FC = () => {
              <input type="text" style={fieldStyle} value={subtaskForm.name} onChange={(e) => setSubtaskForm({...subtaskForm, name: e.target.value})} placeholder="What needs to be done?" className={inputClass} />
            </div>
            <div className="space-y-1">
-             <label className="text-xs font-bold text-gray-400 uppercase">Markdown Notes</label>
+             <label className="text-xs font-bold text-gray-400 uppercase">Itemized List (Markdown)</label>
              <textarea style={fieldStyle} value={subtaskForm.description} onChange={(e) => setSubtaskForm({...subtaskForm, description: e.target.value})} placeholder="- Detailed task 1&#10;- Requirement 2..." className={textareaClass} />
            </div>
            <div className="grid grid-cols-2 gap-4">
@@ -616,7 +617,7 @@ const App: React.FC = () => {
              <input type="text" style={fieldStyle} value={subtaskForm.name} onChange={(e) => setSubtaskForm({...subtaskForm, name: e.target.value})} placeholder="Task name" className={inputClass} />
            </div>
            <div className="space-y-1">
-             <label className="text-xs font-bold text-gray-400 uppercase">Markdown Notes</label>
+             <label className="text-xs font-bold text-gray-400 uppercase">Itemized List (Markdown)</label>
              <textarea style={fieldStyle} value={subtaskForm.description} onChange={(e) => setSubtaskForm({...subtaskForm, description: e.target.value})} placeholder="- Edit points..." className={textareaClass} />
            </div>
            <div className="grid grid-cols-2 gap-4">
