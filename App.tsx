@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { AppData, Project, TimerMode, AppSessionLog, AppSettings, Importance, Urgency, Subtask } from './types';
-import { getIstanbulDate, generateId, calculateProjectStats, formatTime, getDailyProjectCompletion, isProjectFinished } from './utils';
+import { getIstanbulDate, generateId, calculateProjectStats, formatTime, getDailyProjectCompletion, isProjectFinished, getEstimatedFinishDate } from './utils';
 import { Button } from './components/Button';
 import { Modal } from './components/Modal';
 import { AppSessionTimer } from './components/AppSessionTimer';
 import { PerformanceGraph } from './components/PerformanceGraph';
 import { CalendarView } from './components/CalendarView';
-import { Trash2, Plus, Minus, SkipForward, Menu, Download, Upload, Book, Settings, Target, BarChart3, ArrowLeft, RotateCcw, Calendar as CalendarIcon, Edit2, ChevronDown, ChevronUp, Repeat, CheckCircle } from 'lucide-react';
+import { Trash2, Plus, Minus, SkipForward, Menu, Download, Upload, Book, Settings, Target, BarChart3, ArrowLeft, RotateCcw, Calendar as CalendarIcon, Edit2, ChevronDown, ChevronUp, Repeat, CheckCircle, ChevronRight, AlertTriangle } from 'lucide-react';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 
@@ -64,6 +64,10 @@ const App: React.FC = () => {
   const [isCalendarViewOpen, setIsCalendarViewOpen] = useState(false);
   const [expandedSubtasks, setExpandedSubtasks] = useState<Set<string>>(new Set());
   
+  // UI State for sidebar sections
+  const [isActiveProjectsExpanded, setIsActiveProjectsExpanded] = useState(true);
+  const [isFinishedProjectsExpanded, setIsFinishedProjectsExpanded] = useState(false);
+
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectDesc, setNewProjectDesc] = useState('');
   const [newProjectIsDaily, setNewProjectIsDaily] = useState(false);
@@ -423,6 +427,13 @@ const App: React.FC = () => {
     return { activeProjects: active, finishedProjects: finished };
   }, [projects]);
 
+  // Determine if the selected project is late
+  const isSelectedProjectLate = useMemo(() => {
+    if (!selectedProject || selectedProject.isDaily || isProjectFinished(selectedProject)) return false;
+    const estFinish = getEstimatedFinishDate(selectedProject, settings.dailyPomodoroTarget);
+    return estFinish ? new Date() > estFinish : false;
+  }, [selectedProject, settings.dailyPomodoroTarget]);
+
   const SidebarProjectItem: React.FC<{ project: Project }> = ({ project }) => {
     let stats;
     if (project.isDaily) {
@@ -433,6 +444,12 @@ const App: React.FC = () => {
     } else {
         stats = calculateProjectStats(project.subtasks);
     }
+
+    const isLate = useMemo(() => {
+        if (project.isDaily || isProjectFinished(project)) return false;
+        const estFinish = getEstimatedFinishDate(project, settings.dailyPomodoroTarget);
+        return estFinish ? new Date() > estFinish : false;
+    }, [project]);
     
     return (
         <div onClick={() => { setSelectedProjectId(project.id); setIsPerformanceViewOpen(false); setIsCalendarViewOpen(false); }} className={`p-4 rounded-lg cursor-pointer transition-all border ${selectedProjectId === project.id ? 'bg-white/20 border-white/40 shadow-lg' : 'bg-white/5 border-transparent hover:bg-white/10'}`}>
@@ -441,6 +458,7 @@ const App: React.FC = () => {
                 <div className="flex items-center gap-2">
                 <h3 className="font-semibold truncate">{project.name}</h3>
                 {project.isDaily && <Repeat className="w-3 h-3 text-yellow-300" />}
+                {isLate && <AlertTriangle className="w-3 h-3 text-red-400" />}
                 {isProjectFinished(project) && !project.isDaily && <CheckCircle className="w-3 h-3 text-emerald-400" />}
                 </div>
                 {project.description && <p className="text-[10px] opacity-40 truncate">{project.description}</p>}
@@ -479,20 +497,38 @@ const App: React.FC = () => {
           <div className="flex-1 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-white/30">
             {/* Active Projects Section */}
             <div className="mb-6">
-                <div className="text-xs font-bold text-white/40 uppercase tracking-widest mb-3 pl-1">Active Projects</div>
-                <div className="space-y-3">
-                    {activeProjects.map(project => <SidebarProjectItem key={project.id} project={project} />)}
-                </div>
-                <button onClick={() => setIsAddProjectModalOpen(true)} className="w-full mt-3 py-4 border-2 border-dashed border-white/20 rounded-lg hover:bg-white/10 hover:border-white/40 flex items-center justify-center gap-2 transition-all font-medium text-white/80"><Plus className="w-5 h-5" /> Add Project</button>
+                <button 
+                  onClick={() => setIsActiveProjectsExpanded(!isActiveProjectsExpanded)}
+                  className="flex items-center gap-2 text-xs font-bold text-white/40 uppercase tracking-widest mb-3 pl-1 w-full hover:text-white/70 transition-colors"
+                >
+                  {isActiveProjectsExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                  Active Projects
+                </button>
+                
+                {isActiveProjectsExpanded && (
+                  <div className="space-y-3 animate-fade-in">
+                      {activeProjects.map(project => <SidebarProjectItem key={project.id} project={project} />)}
+                      <button onClick={() => setIsAddProjectModalOpen(true)} className="w-full mt-3 py-4 border-2 border-dashed border-white/20 rounded-lg hover:bg-white/10 hover:border-white/40 flex items-center justify-center gap-2 transition-all font-medium text-white/80"><Plus className="w-5 h-5" /> Add Project</button>
+                  </div>
+                )}
             </div>
 
             {/* Finished Projects Section */}
             {finishedProjects.length > 0 && (
                 <div className="pt-6 border-t border-white/10">
-                    <div className="text-xs font-bold text-white/40 uppercase tracking-widest mb-3 pl-1">Finished Projects</div>
-                    <div className="space-y-3 opacity-60 hover:opacity-100 transition-opacity">
-                        {finishedProjects.map(project => <SidebarProjectItem key={project.id} project={project} />)}
-                    </div>
+                    <button 
+                      onClick={() => setIsFinishedProjectsExpanded(!isFinishedProjectsExpanded)}
+                      className="flex items-center gap-2 text-xs font-bold text-white/40 uppercase tracking-widest mb-3 pl-1 w-full hover:text-white/70 transition-colors"
+                    >
+                      {isFinishedProjectsExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                      Finished Projects
+                    </button>
+                    
+                    {isFinishedProjectsExpanded && (
+                      <div className="space-y-3 opacity-60 hover:opacity-100 transition-opacity animate-fade-in">
+                          {finishedProjects.map(project => <SidebarProjectItem key={project.id} project={project} />)}
+                      </div>
+                    )}
                 </div>
             )}
           </div>
@@ -588,6 +624,7 @@ const App: React.FC = () => {
                        <div className="flex items-center gap-2">
                          <h2 className="text-2xl font-bold">{selectedProject.name}</h2>
                          {selectedProject.isDaily && <div className="bg-yellow-400 text-black text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1"><Repeat className="w-3 h-3" /> Daily</div>}
+                         {isSelectedProjectLate && <div className="bg-red-500/20 text-red-400 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1 border border-red-500/50"><AlertTriangle className="w-3 h-3" /> Late</div>}
                          <button onClick={() => openEditProjectModal(selectedProject)} className="ml-3 p-1.5 hover:bg-white/10 rounded-lg text-white/60 hover:text-white transition-colors" title="Edit Project"><Edit2 className="w-5 h-5" /></button>
                        </div>
                        <div className="text-sm opacity-80 mt-1">Time Spent: {selectedProjectStats.timeSpent} <span className="mx-2">|</span> Est. Remaining: {selectedProjectStats.timeRemaining}</div>

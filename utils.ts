@@ -81,3 +81,23 @@ export const isProjectFinished = (project: Project): boolean => {
     return project.subtasks.every(t => t.completedSessions >= t.targetSessions);
   }
 };
+
+export const getEstimatedFinishDate = (project: Project, dailyTarget: number): Date | null => {
+  if (project.isDaily) {
+    return project.recurrenceEndDate ? new Date(project.recurrenceEndDate) : null;
+  }
+  
+  const totalSessions = project.subtasks.reduce((sum, t) => sum + t.targetSessions, 0);
+  if (totalSessions === 0) return null;
+  
+  // Basic estimation: Total Sessions / Daily Target (defaulting to 1 to avoid infinity)
+  const daysRequired = Math.ceil(totalSessions / (dailyTarget || 1));
+  
+  const startDate = new Date(project.createdAt);
+  const finishDate = new Date(startDate);
+  finishDate.setDate(startDate.getDate() + daysRequired);
+  // Set to end of that day for comparison
+  finishDate.setHours(23, 59, 59, 999);
+  
+  return finishDate;
+};

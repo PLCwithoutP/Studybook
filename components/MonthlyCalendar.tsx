@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { AppSessionLog, Project, AppSettings } from '../types';
-import { ChevronLeft, ChevronRight, X, CheckCircle, Target, FileText, Clock, Edit3, Check, Repeat, XCircle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, CheckCircle, Target, FileText, Clock, Edit3, Check, Repeat, XCircle, AlertTriangle } from 'lucide-react';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
-import { getDailyProjectCompletion } from '../utils';
+import { getDailyProjectCompletion, getEstimatedFinishDate, isProjectFinished } from '../utils';
 
 interface MonthlyCalendarProps {
   history: AppSessionLog[];
@@ -369,7 +369,13 @@ export const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({
                     <div className="pt-6 border-t border-white/10 animate-fade-in">
                        <div className="text-[10px] uppercase tracking-[0.2em] text-white/40 font-bold mb-4">Active Projects</div>
                        <div className="grid grid-cols-1 gap-2">
-                         {projectsOnSelectedDay.map(p => (
+                         {projectsOnSelectedDay.map(p => {
+                           const fullProject = projects.find(proj => proj.id === p.id);
+                           const isLate = fullProject && !fullProject.isDaily && !isProjectFinished(fullProject) 
+                                ? (getEstimatedFinishDate(fullProject, settings.dailyPomodoroTarget) || new Date()) < new Date()
+                                : false;
+
+                           return (
                            <div 
                              key={p.id} 
                              onClick={() => onActivateProject(p.id)}
@@ -378,11 +384,15 @@ export const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({
                                <div className="w-1.5 h-6 rounded-full" style={{ backgroundColor: p.status === 'failed' ? '#ef4444' : p.color }} />
                                <div className="flex-1 overflow-hidden">
                                   <div className={`text-xs font-bold truncate group-hover:text-white ${p.status === 'failed' ? 'text-red-400' : 'text-white/80'}`}>{p.name}</div>
-                                  {p.isDaily && <div className="text-[9px] uppercase tracking-wider opacity-50 flex items-center gap-1"><Repeat className="w-2 h-2" /> Daily</div>}
+                                  <div className="flex items-center gap-2">
+                                    {p.isDaily && <div className="text-[9px] uppercase tracking-wider opacity-50 flex items-center gap-1"><Repeat className="w-2 h-2" /> Daily</div>}
+                                    {isLate && <div className="text-[9px] uppercase tracking-wider text-red-400 flex items-center gap-1 font-bold"><AlertTriangle className="w-2 h-2" /> Late</div>}
+                                  </div>
                                </div>
                                {p.status === 'failed' ? <XCircle className="w-4 h-4 text-red-500" /> : <CheckCircle className="w-4 h-4 text-white/10 group-hover:text-white/40 transition-colors" />}
                            </div>
-                         ))}
+                         );
+                         })}
                        </div>
                     </div>
                  )}
