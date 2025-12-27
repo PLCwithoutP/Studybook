@@ -4,7 +4,8 @@ import { MonthlyCalendar } from './MonthlyCalendar';
 import { GanttChart } from './GanttChart';
 import { GanttTimeline } from './GanttTimeline';
 import { EisenhowerMatrix } from './EisenhowerMatrix';
-import { LayoutGrid, BarChart, ListTodo, Grid3X3 } from 'lucide-react';
+import { HistoryView } from './HistoryView';
+import { LayoutGrid, BarChart, ListTodo, Grid3X3, History } from 'lucide-react';
 
 interface CalendarViewProps {
   history: AppSessionLog[];
@@ -19,7 +20,7 @@ interface CalendarViewProps {
   onUpdateDayAgenda: (date: string, hour: string, text: string) => void;
 }
 
-type Tab = 'agenda' | 'progress' | 'gantt' | 'matrix';
+type Tab = 'agenda' | 'progress' | 'gantt' | 'matrix' | 'history';
 
 export const CalendarView: React.FC<CalendarViewProps> = ({ 
   history, 
@@ -66,6 +67,13 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
         >
           <BarChart className="w-5 h-5" /> Gantt Chart
         </button>
+        <button
+          onClick={() => setActiveTab('history')}
+          className={`flex items-center gap-2 px-5 py-3 text-base md:text-lg font-medium rounded-t-xl transition-all whitespace-nowrap
+            ${activeTab === 'history' ? 'bg-white/20 text-white border-b-4 border-white' : 'text-white/50 hover:text-white hover:bg-white/5'}`}
+        >
+          <History className="w-5 h-5" /> History
+        </button>
       </div>
 
       <div className="animate-fade-in min-h-[400px]">
@@ -84,6 +92,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
         {activeTab === 'matrix' && <EisenhowerMatrix projects={projects} activeProjectId={activeProjectId} onProjectSelect={onProjectSelect} />}
         {activeTab === 'progress' && <GanttChart projects={projects} history={history} />}
         {activeTab === 'gantt' && <GanttTimeline projects={projects} settings={settings} />}
+        {activeTab === 'history' && <HistoryView projects={projects} />}
       </div>
     </div>
   );

@@ -1,4 +1,6 @@
 
+import { Project } from './types';
+
 export const formatTime = (seconds: number): string => {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
@@ -64,4 +66,18 @@ export const getDailyProjectCompletion = (projectId: string, dateStr: string, hi
   // Assuming 1 log = 1 session for simplicity in this context, or we could parse duration
   // Let's assume 1 log = 1 session completed
   return logs.length;
+};
+
+export const isProjectFinished = (project: Project): boolean => {
+  if (project.isDaily) {
+    if (!project.recurrenceEndDate) return false; // Indefinite daily projects are never "finished"
+    const end = new Date(project.recurrenceEndDate);
+    end.setHours(23, 59, 59, 999); // End of that day
+    const today = new Date();
+    return end < today;
+  } else {
+    // Standard project: finished if has subtasks and all are completed
+    if (project.subtasks.length === 0) return false;
+    return project.subtasks.every(t => t.completedSessions >= t.targetSessions);
+  }
 };

@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { AppData, Project, TimerMode, AppSessionLog, AppSettings, Importance, Urgency, Subtask } from './types';
-import { getIstanbulDate, generateId, calculateProjectStats, formatTime, getDailyProjectCompletion } from './utils';
+import { getIstanbulDate, generateId, calculateProjectStats, formatTime, getDailyProjectCompletion, isProjectFinished } from './utils';
 import { Button } from './components/Button';
 import { Modal } from './components/Modal';
 import { AppSessionTimer } from './components/AppSessionTimer';
 import { PerformanceGraph } from './components/PerformanceGraph';
 import { CalendarView } from './components/CalendarView';
-import { Trash2, Plus, Minus, SkipForward, Menu, Download, Upload, Book, Settings, Target, BarChart3, ArrowLeft, RotateCcw, Calendar as CalendarIcon, Edit2, ChevronDown, ChevronUp, Repeat } from 'lucide-react';
+import { Trash2, Plus, Minus, SkipForward, Menu, Download, Upload, Book, Settings, Target, BarChart3, ArrowLeft, RotateCcw, Calendar as CalendarIcon, Edit2, ChevronDown, ChevronUp, Repeat, CheckCircle } from 'lucide-react';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 
@@ -410,6 +410,50 @@ const App: React.FC = () => {
     return segments;
   }, [selectedProject, activeSubtaskId]);
 
+  const { activeProjects, finishedProjects } = useMemo(() => {
+    const active: Project[] = [];
+    const finished: Project[] = [];
+    projects.forEach(p => {
+        if (isProjectFinished(p)) {
+            finished.push(p);
+        } else {
+            active.push(p);
+        }
+    });
+    return { activeProjects: active, finishedProjects: finished };
+  }, [projects]);
+
+  const SidebarProjectItem: React.FC<{ project: Project }> = ({ project }) => {
+    let stats;
+    if (project.isDaily) {
+        const todayStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+        const dailyDone = getDailyProjectCompletion(project.id, todayStr, appHistory);
+        const dailyTarget = project.subtasks.reduce((sum, t) => sum + t.targetSessions, 0);
+        stats = { totalSessions: dailyTarget, completedSessions: dailyDone };
+    } else {
+        stats = calculateProjectStats(project.subtasks);
+    }
+    
+    return (
+        <div onClick={() => { setSelectedProjectId(project.id); setIsPerformanceViewOpen(false); setIsCalendarViewOpen(false); }} className={`p-4 rounded-lg cursor-pointer transition-all border ${selectedProjectId === project.id ? 'bg-white/20 border-white/40 shadow-lg' : 'bg-white/5 border-transparent hover:bg-white/10'}`}>
+            <div className="flex justify-between items-start mb-2">
+            <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                <h3 className="font-semibold truncate">{project.name}</h3>
+                {project.isDaily && <Repeat className="w-3 h-3 text-yellow-300" />}
+                {isProjectFinished(project) && !project.isDaily && <CheckCircle className="w-3 h-3 text-emerald-400" />}
+                </div>
+                {project.description && <p className="text-[10px] opacity-40 truncate">{project.description}</p>}
+            </div>
+            <button onClick={(e) => { e.stopPropagation(); if (window.confirm("Delete project?")) { setProjects(prev => prev.filter(p => p.id !== project.id)); if (selectedProjectId === project.id) setSelectedProjectId(null); } }} className="text-white/50 hover:text-white p-1"><Trash2 className="w-4 h-4" /></button>
+            </div>
+            <div className="w-full bg-black/20 rounded-full h-1.5 overflow-hidden">
+            <div className="bg-white h-1.5 rounded-full transition-all duration-500" style={{ width: `${stats.totalSessions > 0 ? (stats.completedSessions / stats.totalSessions) * 100 : 0}%` }} />
+            </div>
+        </div>
+    );
+  };
+
   const fieldStyle = { colorScheme: 'light' } as React.CSSProperties;
   const inputClass = "w-full !bg-white !text-gray-900 border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-rose-500 outline-none transition-all placeholder:text-gray-400";
   const textareaClass = "w-full !bg-white !text-gray-900 border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-rose-500 outline-none transition-all placeholder:text-gray-400 min-h-[100px] resize-y text-sm leading-relaxed";
@@ -432,39 +476,27 @@ const App: React.FC = () => {
              <h1 className="text-2xl font-bold flex items-center gap-2 select-none"><Book className="w-6 h-6" /> Studybook</h1>
              <button onClick={() => setIsSidebarOpen(false)} className="md:hidden"><Menu className="w-6 h-6" /></button>
           </div>
-          <div className="flex-1 overflow-y-auto space-y-3 pr-2 scrollbar-thin scrollbar-thumb-white/30">
-            {projects.map(project => {
-              // Sidebar Stats: For daily projects, show TODAY'S stats
-              let stats;
-              if (project.isDaily) {
-                const todayStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
-                const dailyDone = getDailyProjectCompletion(project.id, todayStr, appHistory);
-                const dailyTarget = project.subtasks.reduce((sum, t) => sum + t.targetSessions, 0);
-                stats = { totalSessions: dailyTarget, completedSessions: dailyDone };
-              } else {
-                stats = calculateProjectStats(project.subtasks);
-              }
-
-              return (
-                <div key={project.id} onClick={() => { setSelectedProjectId(project.id); setIsPerformanceViewOpen(false); setIsCalendarViewOpen(false); }} className={`p-4 rounded-lg cursor-pointer transition-all border ${selectedProjectId === project.id ? 'bg-white/20 border-white/40 shadow-lg' : 'bg-white/5 border-transparent hover:bg-white/10'}`}>
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-semibold truncate">{project.name}</h3>
-                        {project.isDaily && <Repeat className="w-3 h-3 text-yellow-300" />}
-                      </div>
-                      {project.description && <p className="text-[10px] opacity-40 truncate">{project.description}</p>}
-                    </div>
-                    <button onClick={(e) => { e.stopPropagation(); if (window.confirm("Delete project?")) { setProjects(prev => prev.filter(p => p.id !== project.id)); if (selectedProjectId === project.id) setSelectedProjectId(null); } }} className="text-white/50 hover:text-white p-1"><Trash2 className="w-4 h-4" /></button>
-                  </div>
-                  <div className="w-full bg-black/20 rounded-full h-1.5 overflow-hidden">
-                    <div className="bg-white h-1.5 rounded-full transition-all duration-500" style={{ width: `${stats.totalSessions > 0 ? (stats.completedSessions / stats.totalSessions) * 100 : 0}%` }} />
-                  </div>
+          <div className="flex-1 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-white/30">
+            {/* Active Projects Section */}
+            <div className="mb-6">
+                <div className="text-xs font-bold text-white/40 uppercase tracking-widest mb-3 pl-1">Active Projects</div>
+                <div className="space-y-3">
+                    {activeProjects.map(project => <SidebarProjectItem key={project.id} project={project} />)}
                 </div>
-              );
-            })}
-            <button onClick={() => setIsAddProjectModalOpen(true)} className="w-full py-4 border-2 border-dashed border-white/20 rounded-lg hover:bg-white/10 hover:border-white/40 flex items-center justify-center gap-2 transition-all font-medium text-white/80"><Plus className="w-5 h-5" /> Add Project</button>
+                <button onClick={() => setIsAddProjectModalOpen(true)} className="w-full mt-3 py-4 border-2 border-dashed border-white/20 rounded-lg hover:bg-white/10 hover:border-white/40 flex items-center justify-center gap-2 transition-all font-medium text-white/80"><Plus className="w-5 h-5" /> Add Project</button>
+            </div>
+
+            {/* Finished Projects Section */}
+            {finishedProjects.length > 0 && (
+                <div className="pt-6 border-t border-white/10">
+                    <div className="text-xs font-bold text-white/40 uppercase tracking-widest mb-3 pl-1">Finished Projects</div>
+                    <div className="space-y-3 opacity-60 hover:opacity-100 transition-opacity">
+                        {finishedProjects.map(project => <SidebarProjectItem key={project.id} project={project} />)}
+                    </div>
+                </div>
+            )}
           </div>
+
           <div className="mt-6 pt-6 border-t border-white/10 space-y-2">
              <button onClick={() => setIsSettingsModalOpen(true)} className="w-full flex items-center gap-3 px-4 py-2 rounded hover:bg-white/10 transition-colors text-sm"><Settings className="w-4 h-4" /> Settings</button>
              <button onClick={() => { setIsPerformanceViewOpen(true); setIsCalendarViewOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-2 rounded transition-colors text-sm ${isPerformanceViewOpen ? 'bg-white/30' : 'hover:bg-white/10'}`}><BarChart3 className="w-4 h-4" /> Performance</button>
@@ -476,6 +508,7 @@ const App: React.FC = () => {
       </div>
 
       <div className="flex-1 flex flex-col h-screen overflow-y-auto relative bg-transparent pr-4">
+        {/* Main Content Render Logic (Unchanged, just ensuring wrapping) */}
         <div className="md:hidden p-4 absolute top-0 left-0 z-20">
           <button onClick={() => setIsSidebarOpen(true)} className="p-2 bg-white/20 rounded-md backdrop-blur-sm"><Menu className="w-6 h-6" /></button>
         </div>
@@ -514,6 +547,7 @@ const App: React.FC = () => {
             </div>
           ) : (
             <>
+              {/* Timer View */}
               <div className="text-center mb-8 animate-fade-in mt-12 md:mt-0 w-full max-w-md">
                 <h2 className="text-3xl font-bold mb-2">Welcome Back, Furkan</h2>
                 <p className="text-white/80 text-lg opacity-90 mb-4">{getIstanbulDate()}</p>
@@ -548,6 +582,7 @@ const App: React.FC = () => {
 
               {selectedProject && selectedProjectStats && (
                 <div className="w-full max-w-[550px] animate-fade-in-up">
+                  {/* Selected Project Details */}
                   <div className="flex justify-between items-end mb-4 border-b border-white/30 pb-2">
                      <div>
                        <div className="flex items-center gap-2">
@@ -567,16 +602,7 @@ const App: React.FC = () => {
                   <div className="space-y-3">
                     {selectedProject.subtasks.map(task => {
                       const isExpanded = expandedSubtasks.has(task.id);
-                      // Visual adjustments for completed state for Daily projects - usually we don't cross them out unless done TODAY
-                      // But for simplicity, we rely on completedSessions which we update for daily projects differently?
-                      // Wait, we update `projects` state via `updateSubtaskProgress` which increments `completedSessions`.
-                      // For DAILY projects, `completedSessions` in the state accumulates forever.
-                      // We should ideally reset it or ignore it.
-                      // The Sidebar uses `stats` calculated from history.
-                      // The main view (here) uses `selectedProjectStats` which is also calculated from history for daily projects.
-                      // But `task.completedSessions` directly accessed below is the accumulated one.
-                      // Let's hide the direct use of `task.completedSessions` for strike-through if it's daily.
-                      const isDone = selectedProject.isDaily ? false : task.completedSessions >= task.targetSessions; // Daily tasks are never "fully done forever"
+                      const isDone = selectedProject.isDaily ? false : task.completedSessions >= task.targetSessions;
 
                       return (
                         <div key={task.id} onClick={() => setActiveSubtaskId(task.id)} className={`relative p-4 rounded-xl border-l-8 cursor-pointer transition-all hover:brightness-110 ${isDone ? 'bg-emerald-500/20 border-emerald-400' : 'bg-rose-500/10 border-rose-300' } ${activeSubtaskId === task.id ? 'ring-2 ring-white ring-offset-2 ring-offset-transparent transform scale-[1.02] shadow-xl' : ''}`}>
@@ -594,7 +620,6 @@ const App: React.FC = () => {
                                   )}
                                 </div>
                                 <div className="flex items-center gap-4 shrink-0">
-                                    {/* For daily tasks, show accumulated or today? Standard behavior is just show raw numbers. */}
                                     <div className="font-mono text-lg font-bold">{task.completedSessions} <span className="opacity-50 text-sm">/ {task.targetSessions}</span></div>
                                     <div className="flex items-center gap-1 bg-black/20 rounded-lg p-1">
                                       <button onClick={(e) => { e.stopPropagation(); updateSessionTarget(selectedProject.id, task.id, -1); }} className="p-1 hover:bg-white/20 rounded transition-colors" disabled={task.targetSessions <= task.completedSessions || task.targetSessions <= 1}><Minus className="w-4 h-4" /></button>
@@ -633,7 +658,7 @@ const App: React.FC = () => {
 
       <AppSessionTimer onUpdate={handleAppTimerUpdate} />
 
-      {/* Settings Modal - Unchanged logic */}
+      {/* Settings Modal */}
       <Modal isOpen={isSettingsModalOpen} onClose={() => setIsSettingsModalOpen(false)} title="Settings">
         <div className="space-y-6 text-gray-800">
            <div>
@@ -672,6 +697,7 @@ const App: React.FC = () => {
         </div>
       </Modal>
 
+      {/* New Project Modal */}
       <Modal isOpen={isAddProjectModalOpen} onClose={() => setIsAddProjectModalOpen(false)} title="New Project">
         <div className="space-y-4 text-gray-800">
            <input type="text" style={fieldStyle} value={newProjectName} onChange={(e) => setNewProjectName(e.target.value)} placeholder="Project Name" className={inputClass} />
@@ -723,6 +749,7 @@ const App: React.FC = () => {
         </div>
       </Modal>
 
+      {/* Edit Project Modal */}
       <Modal isOpen={isEditProjectModalOpen} onClose={() => setIsEditProjectModalOpen(false)} title="Edit Project">
         <div className="space-y-4 text-gray-800">
            <input type="text" style={fieldStyle} value={editProjectData.name} onChange={(e) => setEditProjectData({...editProjectData, name: e.target.value})} placeholder="Project Name" className={inputClass} />
@@ -748,8 +775,8 @@ const App: React.FC = () => {
         </div>
       </Modal>
 
+      {/* Add Subtask Modal */}
       <Modal isOpen={isAddSubtaskModalOpen} onClose={() => { setIsAddSubtaskModalOpen(false); resetSubtaskForm(); }} title="Add Subtask">
-        {/* Unchanged Subtask Modal Content */}
         <div className="space-y-4 text-gray-800">
            <div className="space-y-1">
              <label className="text-xs font-bold text-gray-400 uppercase">Name</label>
@@ -785,8 +812,8 @@ const App: React.FC = () => {
         </div>
       </Modal>
 
+      {/* Edit Subtask Modal */}
       <Modal isOpen={isEditSubtaskModalOpen} onClose={() => { setIsEditSubtaskModalOpen(false); resetSubtaskForm(); }} title="Edit Subtask">
-        {/* Unchanged Edit Modal Content */}
         <div className="space-y-4 text-gray-800">
            <div className="space-y-1">
              <label className="text-xs font-bold text-gray-400 uppercase">Name</label>
