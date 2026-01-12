@@ -1,5 +1,5 @@
 
-import { Project } from './types';
+import { Project, AppSessionLog } from './types';
 
 export const formatTime = (seconds: number): string => {
   const h = Math.floor(seconds / 3600);
@@ -20,6 +20,11 @@ export const getIstanbulDate = (): string => {
     month: 'long',
     day: 'numeric',
   });
+};
+
+// Standardized date string for Logs (matches 'en-GB' format used in App)
+export const getLogDateString = (date: Date = new Date()): string => {
+  return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
 };
 
 export const generateId = (): string => {
@@ -57,15 +62,26 @@ export const hexToRgba = (hex: string, alpha: number): string => {
 };
 
 // Helper to count sessions from history for a specific project on a specific date string
-export const getDailyProjectCompletion = (projectId: string, dateStr: string, history: any[]) => {
-  // Filter history for this project and date
-  // Note: history date format matches MonthlyCalendar's format (e.g. "01 January 2024")
-  const logs = history.filter((log: any) => log.projectId === projectId && log.date === dateStr);
-  
-  // Estimate sessions from duration or just count logs
-  // Assuming 1 log = 1 session for simplicity in this context, or we could parse duration
-  // Let's assume 1 log = 1 session completed
+export const getDailyProjectCompletion = (projectId: string, dateStr: string, history: AppSessionLog[]) => {
+  const logs = history.filter((log) => log.projectId === projectId && log.date === dateStr);
   return logs.length;
+};
+
+// Get completed sessions for a specific subtask on a specific date (defaults to Today)
+export const getSubtaskCompletionToday = (subtaskId: string, history: AppSessionLog[], dateStr: string = getLogDateString()): number => {
+  return history.filter(log => log.subtaskId === subtaskId && log.date === dateStr).length;
+};
+
+// Check if a Daily project is "Done" for the current day
+export const isDailyProjectDoneToday = (project: Project, history: AppSessionLog[]): boolean => {
+  if (!project.isDaily) return false;
+  const todayStr = getLogDateString();
+  
+  // A daily project is done if all its subtasks have met their daily target
+  return project.subtasks.every(task => {
+    const doneToday = getSubtaskCompletionToday(task.id, history, todayStr);
+    return doneToday >= task.targetSessions;
+  });
 };
 
 export const isProjectFinished = (project: Project): boolean => {

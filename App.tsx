@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { AppData, Project, TimerMode, AppSessionLog, AppSettings, Importance, Urgency, Subtask } from './types';
-import { getIstanbulDate, generateId, calculateProjectStats, formatTime, getDailyProjectCompletion, isProjectFinished, getEstimatedFinishDate } from './utils';
+import { getIstanbulDate, generateId, calculateProjectStats, formatTime, getDailyProjectCompletion, isProjectFinished, getEstimatedFinishDate, getLogDateString, isDailyProjectDoneToday, getSubtaskCompletionToday } from './utils';
 import { Button } from './components/Button';
 import { Modal } from './components/Modal';
 import { AppSessionTimer } from './components/AppSessionTimer';
@@ -131,7 +131,7 @@ const App: React.FC = () => {
       setPomoCount(nextPomoCount);
       
       // Update persistent history
-      const todayStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+      const todayStr = getLogDateString();
       const newLog: AppSessionLog = {
         date: todayStr,
         duration: formatTime(settings.durations.pomodoro * 60),
@@ -183,7 +183,6 @@ const App: React.FC = () => {
       return;
     }
 
-    // Validate all subtasks have importance and urgency
     const hasInvalidSubtasks = newSubtasks.some(st => st.name.trim() !== '' && (st.importance === '' || st.urgency === ''));
     if (hasInvalidSubtasks) {
       alert("Please select Importance and Urgency for all items.");
@@ -340,7 +339,7 @@ const App: React.FC = () => {
   };
 
   const handleExport = () => {
-    const todayStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+    const todayStr = getLogDateString();
     const dataToExport: AppData = { 
       projects, 
       appHistory: [...appHistory], 
@@ -383,7 +382,7 @@ const App: React.FC = () => {
   const selectedProjectStats = useMemo(() => {
     if (!selectedProject) return null;
     if (selectedProject.isDaily) {
-      const todayStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+      const todayStr = getLogDateString();
       const dailyDone = getDailyProjectCompletion(selectedProject.id, todayStr, appHistory);
       const dailyTarget = selectedProject.subtasks.reduce((sum, t) => sum + t.targetSessions, 0);
       return {
@@ -405,6 +404,8 @@ const App: React.FC = () => {
     const segments: string[] = [];
     selectedProject.subtasks.forEach(task => {
       const isTaskActive = task.id === activeSubtaskId;
+      // For visual bars, standard logic applies. 
+      // For daily, we could show Today's completion but let's stick to standard for now to avoid complexity in this bar.
       for (let i = 0; i < task.targetSessions; i++) {
         if (i < task.completedSessions) segments.push('bg-teal-800'); 
         else if (isTaskActive) segments.push('bg-yellow-400'); 
@@ -418,14 +419,16 @@ const App: React.FC = () => {
     const active: Project[] = [];
     const finished: Project[] = [];
     projects.forEach(p => {
-        if (isProjectFinished(p)) {
+        // A project is in 'Finished' bin if it is standard finished OR it is a daily project finished TODAY.
+        // It is also 'Finished' if it's expired daily project (which isProjectFinished handles).
+        if (isProjectFinished(p) || isDailyProjectDoneToday(p, appHistory)) {
             finished.push(p);
         } else {
             active.push(p);
         }
     });
     return { activeProjects: active, finishedProjects: finished };
-  }, [projects]);
+  }, [projects, appHistory]);
 
   // Determine if the selected project is late
   const isSelectedProjectLate = useMemo(() => {
@@ -437,7 +440,7 @@ const App: React.FC = () => {
   const SidebarProjectItem: React.FC<{ project: Project }> = ({ project }) => {
     let stats;
     if (project.isDaily) {
-        const todayStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+        const todayStr = getLogDateString();
         const dailyDone = getDailyProjectCompletion(project.id, todayStr, appHistory);
         const dailyTarget = project.subtasks.reduce((sum, t) => sum + t.targetSessions, 0);
         stats = { totalSessions: dailyTarget, completedSessions: dailyDone };
@@ -459,7 +462,9 @@ const App: React.FC = () => {
                 <h3 className="font-semibold truncate">{project.name}</h3>
                 {project.isDaily && <Repeat className="w-3 h-3 text-yellow-300" />}
                 {isLate && <AlertTriangle className="w-3 h-3 text-red-400" />}
-                {isProjectFinished(project) && !project.isDaily && <CheckCircle className="w-3 h-3 text-emerald-400" />}
+                {/* Check circle for standard finished projects OR daily projects finished today */}
+                {(isProjectFinished(project) || (project.isDaily && isDailyProjectDoneToday(project, appHistory))) && !project.isDaily && <CheckCircle className="w-3 h-3 text-emerald-400" />}
+                {project.isDaily && isDailyProjectDoneToday(project, appHistory) && <CheckCircle className="w-3 h-3 text-emerald-400" />}
                 </div>
                 {project.description && <p className="text-[10px] opacity-40 truncate">{project.description}</p>}
             </div>
@@ -639,7 +644,15 @@ const App: React.FC = () => {
                   <div className="space-y-3">
                     {selectedProject.subtasks.map(task => {
                       const isExpanded = expandedSubtasks.has(task.id);
-                      const isDone = selectedProject.isDaily ? false : task.completedSessions >= task.targetSessions;
+                      let isDone = false;
+                      let completedCount = task.completedSessions;
+
+                      if (selectedProject.isDaily) {
+                        completedCount = getSubtaskCompletionToday(task.id, appHistory);
+                        isDone = completedCount >= task.targetSessions;
+                      } else {
+                        isDone = task.completedSessions >= task.targetSessions;
+                      }
 
                       return (
                         <div key={task.id} onClick={() => setActiveSubtaskId(task.id)} className={`relative p-4 rounded-xl border-l-8 cursor-pointer transition-all hover:brightness-110 ${isDone ? 'bg-emerald-500/20 border-emerald-400' : 'bg-rose-500/10 border-rose-300' } ${activeSubtaskId === task.id ? 'ring-2 ring-white ring-offset-2 ring-offset-transparent transform scale-[1.02] shadow-xl' : ''}`}>
@@ -657,7 +670,7 @@ const App: React.FC = () => {
                                   )}
                                 </div>
                                 <div className="flex items-center gap-4 shrink-0">
-                                    <div className="font-mono text-lg font-bold">{task.completedSessions} <span className="opacity-50 text-sm">/ {task.targetSessions}</span></div>
+                                    <div className="font-mono text-lg font-bold">{completedCount} <span className="opacity-50 text-sm">/ {task.targetSessions} {selectedProject.isDaily && '(Today)'}</span></div>
                                     <div className="flex items-center gap-1 bg-black/20 rounded-lg p-1">
                                       <button onClick={(e) => { e.stopPropagation(); updateSessionTarget(selectedProject.id, task.id, -1); }} className="p-1 hover:bg-white/20 rounded transition-colors" disabled={task.targetSessions <= task.completedSessions || task.targetSessions <= 1}><Minus className="w-4 h-4" /></button>
                                       <button onClick={(e) => { e.stopPropagation(); updateSessionTarget(selectedProject.id, task.id, 1); }} className="p-1 hover:bg-white/20 rounded transition-colors"><Plus className="w-4 h-4" /></button>
@@ -697,6 +710,7 @@ const App: React.FC = () => {
 
       {/* Settings Modal */}
       <Modal isOpen={isSettingsModalOpen} onClose={() => setIsSettingsModalOpen(false)} title="Settings">
+        {/* ... existing modal content ... */}
         <div className="space-y-6 text-gray-800">
            <div>
              <h3 className="text-gray-400 uppercase text-xs font-bold tracking-wider mb-3">Timer (minutes)</h3>

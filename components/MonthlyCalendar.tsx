@@ -3,7 +3,7 @@ import { AppSessionLog, Project, AppSettings } from '../types';
 import { ChevronLeft, ChevronRight, X, CheckCircle, Target, FileText, Clock, Edit3, Check, Repeat, XCircle, AlertTriangle } from 'lucide-react';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
-import { getDailyProjectCompletion, getEstimatedFinishDate, isProjectFinished } from '../utils';
+import { getDailyProjectCompletion, getEstimatedFinishDate, isProjectFinished, getLogDateString } from '../utils';
 
 interface MonthlyCalendarProps {
   history: AppSessionLog[];
@@ -53,7 +53,7 @@ export const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({
   projects, 
   settings, 
   dayNotes, 
-  onUpdateDayNote,
+  onUpdateDayNote, 
   dayAgendas,
   onUpdateDayAgenda,
   onActivateProject
@@ -120,7 +120,7 @@ export const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({
           let status: 'success' | 'failed' | 'pending' = 'pending';
           // Check if this date is in the past or today
           if (loopDate <= today) {
-             const dateStr = loopDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+             const dateStr = getLogDateString(loopDate);
              const done = getDailyProjectCompletion(p.id, dateStr, history);
              const target = p.subtasks.reduce((sum, t) => sum + t.targetSessions, 0);
              if (done >= target) status = 'success';
@@ -215,7 +215,7 @@ export const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({
           const dateKey = dateObj.toDateString();
           const isToday = today.toDateString() === dateKey;
           
-          const dateStringHistory = dateObj.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+          const dateStringHistory = getLogDateString(dateObj);
           const focusMins = historyMap[dateStringHistory] || 0;
           const dots = projectsByDay[dateKey] || [];
           
@@ -281,7 +281,7 @@ export const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({
                  <div>
                     <h4 className="text-2xl font-bold flex items-center gap-3">
                        <Target className="w-6 h-6 text-yellow-400" /> 
-                       {new Date(currentDate.getFullYear(), currentDate.getMonth(), selectedDay).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}
+                       {getLogDateString(new Date(currentDate.getFullYear(), currentDate.getMonth(), selectedDay))}
                     </h4>
                     <p className="text-[10px] uppercase tracking-[0.2em] text-white/40 font-bold mt-1">Daily Summary & Agenda</p>
                  </div>
