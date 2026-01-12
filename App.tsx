@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { AppData, Project, TimerMode, AppSessionLog, AppSettings, Importance, Urgency, Subtask } from './types';
+import { AppData, Project, TimerMode, AppSessionLog, AppSettings, Importance, Urgency, Subtask, ProjectCategory } from './types';
 import { getIstanbulDate, generateId, calculateProjectStats, formatTime, getDailyProjectCompletion, isProjectFinished, getEstimatedFinishDate, getLogDateString, isDailyProjectDoneToday, getSubtaskCompletionToday } from './utils';
 import { Button } from './components/Button';
 import { Modal } from './components/Modal';
 import { AppSessionTimer } from './components/AppSessionTimer';
 import { PerformanceGraph } from './components/PerformanceGraph';
 import { CalendarView } from './components/CalendarView';
-import { Trash2, Plus, Minus, SkipForward, Menu, Download, Upload, Book, Settings, Target, BarChart3, ArrowLeft, RotateCcw, Calendar as CalendarIcon, Edit2, ChevronDown, ChevronUp, Repeat, CheckCircle, ChevronRight, AlertTriangle, GripVertical, FileJson } from 'lucide-react';
+import { Trash2, Plus, Minus, SkipForward, Menu, Download, Upload, Book, Settings, Target, BarChart3, ArrowLeft, RotateCcw, Calendar as CalendarIcon, Edit2, ChevronDown, ChevronUp, Repeat, CheckCircle, ChevronRight, AlertTriangle, GripVertical, FileJson, Briefcase, User } from 'lucide-react';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 
@@ -76,16 +76,25 @@ const App: React.FC = () => {
   const [newProjectDesc, setNewProjectDesc] = useState('');
   const [newProjectIsDaily, setNewProjectIsDaily] = useState(false);
   const [newProjectRecurrenceEnd, setNewProjectRecurrenceEnd] = useState('');
+  const [newProjectCategory, setNewProjectCategory] = useState<ProjectCategory>('personal');
   const [newSubtasks, setNewSubtasks] = useState<{name: string, description: string, target: number, importance: Importance | '', urgency: Urgency | ''}[]>([
     {name: '', description: '', target: 1, importance: '', urgency: ''}
   ]);
 
-  const [editProjectData, setEditProjectData] = useState({ 
+  const [editProjectData, setEditProjectData] = useState<{
+    id: string;
+    name: string;
+    description: string;
+    isDaily: boolean;
+    recurrenceEndDate: string;
+    category: ProjectCategory;
+  }>({ 
     id: '', 
     name: '', 
     description: '', 
     isDaily: false, 
-    recurrenceEndDate: '' 
+    recurrenceEndDate: '',
+    category: 'personal'
   });
   
   const [editingSubtask, setEditingSubtask] = useState<Subtask | null>(null);
@@ -200,6 +209,7 @@ const App: React.FC = () => {
       createdAt: new Date().toISOString(),
       isDaily: newProjectIsDaily,
       recurrenceEndDate: newProjectIsDaily ? newProjectRecurrenceEnd : undefined,
+      category: newProjectCategory,
       subtasks: newSubtasks.filter(st => st.name.trim() !== '').map(st => ({
         id: generateId(), 
         name: st.name, 
@@ -215,6 +225,7 @@ const App: React.FC = () => {
     setNewProjectDesc('');
     setNewProjectIsDaily(false);
     setNewProjectRecurrenceEnd('');
+    setNewProjectCategory('personal');
     setNewSubtasks([{name: '', description: '', target: 1, importance: '', urgency: ''}]);
     setIsAddProjectModalOpen(false);
     if (!selectedProjectId) setSelectedProjectId(newProject.id);
@@ -226,7 +237,8 @@ const App: React.FC = () => {
         name: project.name,
         description: project.description || '',
         isDaily: project.isDaily || false,
-        recurrenceEndDate: project.recurrenceEndDate || ''
+        recurrenceEndDate: project.recurrenceEndDate || '',
+        category: project.category || 'personal'
     });
     setIsEditProjectModalOpen(true);
   };
@@ -243,7 +255,8 @@ const App: React.FC = () => {
         name: editProjectData.name,
         description: editProjectData.description,
         isDaily: editProjectData.isDaily,
-        recurrenceEndDate: editProjectData.isDaily ? editProjectData.recurrenceEndDate : undefined
+        recurrenceEndDate: editProjectData.isDaily ? editProjectData.recurrenceEndDate : undefined,
+        category: editProjectData.category
     }));
     setIsEditProjectModalOpen(false);
   };
@@ -551,6 +564,7 @@ const App: React.FC = () => {
             <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                 <h3 className="font-semibold truncate">{project.name}</h3>
+                {project.category === 'work' ? <Briefcase className="w-3 h-3 text-blue-300" /> : <User className="w-3 h-3 text-purple-300" />}
                 {project.isDaily && <Repeat className="w-3 h-3 text-yellow-300" />}
                 {isLate && <AlertTriangle className="w-3 h-3 text-red-400" />}
                 {/* Check circle for standard finished projects OR daily projects finished today */}
@@ -736,6 +750,7 @@ const App: React.FC = () => {
                      <div>
                        <div className="flex items-center gap-2">
                          <h2 className="text-2xl font-bold">{selectedProject.name}</h2>
+                         {selectedProject.category === 'work' ? <Briefcase className="w-4 h-4 text-blue-300" /> : <User className="w-4 h-4 text-purple-300" />}
                          {selectedProject.isDaily && <div className="bg-yellow-400 text-black text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1"><Repeat className="w-3 h-3" /> Daily</div>}
                          {isSelectedProjectLate && <div className="bg-red-500/20 text-red-400 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1 border border-red-500/50"><AlertTriangle className="w-3 h-3" /> Late</div>}
                          <button onClick={() => openEditProjectModal(selectedProject)} className="ml-3 p-1.5 hover:bg-white/10 rounded-lg text-white/60 hover:text-white transition-colors" title="Edit Project"><Edit2 className="w-5 h-5" /></button>
@@ -876,9 +891,19 @@ const App: React.FC = () => {
         <div className="space-y-4 text-gray-800">
            <input type="text" style={fieldStyle} value={newProjectName} onChange={(e) => setNewProjectName(e.target.value)} placeholder="Project Name" className={inputClass} />
            
-           <div className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg border">
-             <input type="checkbox" id="isDaily" checked={newProjectIsDaily} onChange={(e) => setNewProjectIsDaily(e.target.checked)} className="w-4 h-4" />
-             <label htmlFor="isDaily" className="text-sm font-medium flex-1 cursor-pointer flex items-center gap-2"><Repeat className="w-4 h-4 text-gray-500" /> Daily Recurring Project</label>
+           <div className="flex items-center gap-4">
+               <div className="flex-1 space-y-1">
+                 <label className="text-[10px] font-bold text-gray-400 uppercase">Category</label>
+                 <select style={fieldStyle} value={newProjectCategory} onChange={(e) => setNewProjectCategory(e.target.value as ProjectCategory)} className={selectClass}>
+                    <option value="personal">Personal</option>
+                    <option value="work">Work</option>
+                 </select>
+               </div>
+               
+               <div className="flex-1 flex items-center gap-2 p-2 mt-4 bg-gray-50 rounded-lg border">
+                 <input type="checkbox" id="isDaily" checked={newProjectIsDaily} onChange={(e) => setNewProjectIsDaily(e.target.checked)} className="w-4 h-4" />
+                 <label htmlFor="isDaily" className="text-sm font-medium flex-1 cursor-pointer flex items-center gap-2"><Repeat className="w-4 h-4 text-gray-500" /> Daily Recurring</label>
+               </div>
            </div>
            
            {newProjectIsDaily && (
@@ -928,9 +953,19 @@ const App: React.FC = () => {
         <div className="space-y-4 text-gray-800">
            <input type="text" style={fieldStyle} value={editProjectData.name} onChange={(e) => setEditProjectData({...editProjectData, name: e.target.value})} placeholder="Project Name" className={inputClass} />
            
-           <div className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg border">
-             <input type="checkbox" id="editIsDaily" checked={editProjectData.isDaily} onChange={(e) => setEditProjectData({...editProjectData, isDaily: e.target.checked})} className="w-4 h-4" />
-             <label htmlFor="editIsDaily" className="text-sm font-medium flex-1 cursor-pointer flex items-center gap-2"><Repeat className="w-4 h-4 text-gray-500" /> Daily Recurring Project</label>
+           <div className="flex items-center gap-4">
+               <div className="flex-1 space-y-1">
+                 <label className="text-[10px] font-bold text-gray-400 uppercase">Category</label>
+                 <select style={fieldStyle} value={editProjectData.category} onChange={(e) => setEditProjectData({...editProjectData, category: e.target.value as ProjectCategory})} className={selectClass}>
+                    <option value="personal">Personal</option>
+                    <option value="work">Work</option>
+                 </select>
+               </div>
+               
+               <div className="flex-1 flex items-center gap-2 p-2 mt-4 bg-gray-50 rounded-lg border">
+                 <input type="checkbox" id="editIsDaily" checked={editProjectData.isDaily} onChange={(e) => setEditProjectData({...editProjectData, isDaily: e.target.checked})} className="w-4 h-4" />
+                 <label htmlFor="editIsDaily" className="text-sm font-medium flex-1 cursor-pointer flex items-center gap-2"><Repeat className="w-4 h-4 text-gray-500" /> Daily Recurring</label>
+               </div>
            </div>
            
            {editProjectData.isDaily && (
@@ -951,6 +986,7 @@ const App: React.FC = () => {
 
       {/* Add Subtask Modal */}
       <Modal isOpen={isAddSubtaskModalOpen} onClose={() => { setIsAddSubtaskModalOpen(false); resetSubtaskForm(); }} title="Add Subtask">
+        {/* ... existing modal code ... */}
         <div className="space-y-4 text-gray-800">
            <div className="space-y-1">
              <label className="text-xs font-bold text-gray-400 uppercase">Name</label>
@@ -988,6 +1024,7 @@ const App: React.FC = () => {
 
       {/* Edit Subtask Modal */}
       <Modal isOpen={isEditSubtaskModalOpen} onClose={() => { setIsEditSubtaskModalOpen(false); resetSubtaskForm(); }} title="Edit Subtask">
+         {/* ... existing modal code ... */}
         <div className="space-y-4 text-gray-800">
            <div className="space-y-1">
              <label className="text-xs font-bold text-gray-400 uppercase">Name</label>

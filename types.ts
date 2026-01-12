@@ -1,6 +1,7 @@
 
 export type Importance = 'important' | 'not-important';
 export type Urgency = 'emergent' | 'not-emergent';
+export type ProjectCategory = 'work' | 'personal';
 
 export interface Subtask {
   id: string;
@@ -20,6 +21,7 @@ export interface Project {
   createdAt: string;
   isDaily?: boolean;
   recurrenceEndDate?: string;
+  category?: ProjectCategory;
 }
 
 export interface AppSessionLog {

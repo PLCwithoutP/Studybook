@@ -108,12 +108,28 @@ export const getEstimatedFinishDate = (project: Project, dailyTarget: number): D
   
   // Basic estimation: Total Sessions / Daily Target (defaulting to 1 to avoid infinity)
   const daysRequired = Math.ceil(totalSessions / (dailyTarget || 1));
-  
+  const category = project.category || 'personal';
+
   const startDate = new Date(project.createdAt);
-  const finishDate = new Date(startDate);
-  finishDate.setDate(startDate.getDate() + daysRequired);
-  // Set to end of that day for comparison
-  finishDate.setHours(23, 59, 59, 999);
   
-  return finishDate;
+  if (category === 'work') {
+    let current = new Date(startDate);
+    let added = 0;
+    while (added < daysRequired) {
+      current.setDate(current.getDate() + 1);
+      const day = current.getDay();
+      // 0 is Sunday, 6 is Saturday. Skip them.
+      if (day !== 0 && day !== 6) {
+        added++;
+      }
+    }
+    current.setHours(23, 59, 59, 999);
+    return current;
+  } else {
+    // Personal or default: straight day addition
+    const finishDate = new Date(startDate);
+    finishDate.setDate(startDate.getDate() + daysRequired);
+    finishDate.setHours(23, 59, 59, 999);
+    return finishDate;
+  }
 };

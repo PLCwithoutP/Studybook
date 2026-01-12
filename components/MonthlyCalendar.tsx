@@ -143,17 +143,42 @@ export const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({
         if (totalPoms <= 0) totalPoms = 1;
         const durationDays = Math.ceil(totalPoms / dailyTarget);
         
-        for (let i = 0; i < durationDays; i++) {
-          const d = new Date(start);
-          d.setDate(start.getDate() + i);
-          const dateKey = d.toDateString();
-          if (!spans[dateKey]) spans[dateKey] = [];
-          spans[dateKey].push({ 
-            id: p.id, 
-            name: p.name, 
-            color: projectColorMap[p.id],
-            isDaily: false 
-          });
+        if (p.category === 'work') {
+           // Work project logic: Only map to weekdays
+           let added = 0;
+           let current = new Date(start);
+           
+           // If created on a weekend, start mapping from Monday
+           // (Simple approach: just iterate days and skip weekends until we fill durationDays)
+           while (added < durationDays) {
+              const day = current.getDay();
+              if (day !== 0 && day !== 6) { // Skip Sunday (0) and Saturday (6)
+                 const dateKey = current.toDateString();
+                 if (!spans[dateKey]) spans[dateKey] = [];
+                 spans[dateKey].push({ 
+                    id: p.id, 
+                    name: p.name, 
+                    color: projectColorMap[p.id],
+                    isDaily: false 
+                 });
+                 added++;
+              }
+              current.setDate(current.getDate() + 1);
+           }
+        } else {
+           // Personal project logic: Map to every day
+           for (let i = 0; i < durationDays; i++) {
+              const d = new Date(start);
+              d.setDate(start.getDate() + i);
+              const dateKey = d.toDateString();
+              if (!spans[dateKey]) spans[dateKey] = [];
+              spans[dateKey].push({ 
+                id: p.id, 
+                name: p.name, 
+                color: projectColorMap[p.id],
+                isDaily: false 
+              });
+           }
         }
       }
     });
