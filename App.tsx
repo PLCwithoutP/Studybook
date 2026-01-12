@@ -6,7 +6,7 @@ import { Modal } from './components/Modal';
 import { AppSessionTimer } from './components/AppSessionTimer';
 import { PerformanceGraph } from './components/PerformanceGraph';
 import { CalendarView } from './components/CalendarView';
-import { Trash2, Plus, Minus, SkipForward, Menu, Download, Upload, Book, Settings, Target, BarChart3, ArrowLeft, RotateCcw, Calendar as CalendarIcon, Edit2, ChevronDown, ChevronUp, Repeat, CheckCircle, ChevronRight, AlertTriangle } from 'lucide-react';
+import { Trash2, Plus, Minus, SkipForward, Menu, Download, Upload, Book, Settings, Target, BarChart3, ArrowLeft, RotateCcw, Calendar as CalendarIcon, Edit2, ChevronDown, ChevronUp, Repeat, CheckCircle, ChevronRight, AlertTriangle, GripVertical, FileJson } from 'lucide-react';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 
@@ -67,6 +67,10 @@ const App: React.FC = () => {
   // UI State for sidebar sections
   const [isActiveProjectsExpanded, setIsActiveProjectsExpanded] = useState(true);
   const [isFinishedProjectsExpanded, setIsFinishedProjectsExpanded] = useState(false);
+
+  // Drag and Drop States
+  const [draggedSubtaskId, setDraggedSubtaskId] = useState<string | null>(null);
+  const [isDragOverApp, setIsDragOverApp] = useState(false);
 
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectDesc, setNewProjectDesc] = useState('');
@@ -338,13 +342,34 @@ const App: React.FC = () => {
     }));
   };
 
+  // ----- Data Import Logic (Shared) -----
+  const importDataFromFile = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const json = JSON.parse(e.target?.result as string) as AppData;
+        if (json.projects) {
+          setProjects(json.projects);
+          if (json.projects.length > 0) setSelectedProjectId(json.projects[0].id);
+        }
+        if (json.appHistory) setAppHistory(json.appHistory);
+        if (json.dayNotes) setDayNotes(json.dayNotes);
+        if (json.dayAgendas) setDayAgendas(json.dayAgendas);
+        if (json.settings) setSettings(json.settings);
+        // Show success indicator (using basic alert for now, could be improved)
+        alert('Data imported successfully!');
+      } catch (err) { alert('Failed to parse JSON file.'); }
+    };
+    reader.readAsText(file);
+  };
+
   const handleExport = () => {
     const todayStr = getLogDateString();
     const dataToExport: AppData = { 
       projects, 
       appHistory: [...appHistory], 
-      dayNotes,
-      dayAgendas,
+      dayNotes, 
+      dayAgendas, 
       settings 
     };
     const blob = new Blob([JSON.stringify(dataToExport, null, 2)], { type: 'application/json' });
@@ -358,21 +383,87 @@ const App: React.FC = () => {
   const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const json = JSON.parse(e.target?.result as string) as AppData;
-        if (json.projects) {
-          setProjects(json.projects);
-          if (json.projects.length > 0) setSelectedProjectId(json.projects[0].id);
-        }
-        if (json.appHistory) setAppHistory(json.appHistory);
-        if (json.dayNotes) setDayNotes(json.dayNotes);
-        if (json.dayAgendas) setDayAgendas(json.dayAgendas);
-        if (json.settings) setSettings(json.settings);
-      } catch (err) { alert('Failed to parse JSON file.'); }
-    };
-    reader.readAsText(file);
+    importDataFromFile(file);
+  };
+
+  // ----- Subtask Drag & Drop Handlers -----
+  const handleSubtaskDragStart = (e: React.DragEvent, id: string) => {
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", id);
+    setDraggedSubtaskId(id);
+  };
+
+  const handleSubtaskDragOver = (e: React.DragEvent) => {
+    e.preventDefault(); 
+    e.stopPropagation(); // Prevent bubbling to App container
+    e.dataTransfer.dropEffect = "move";
+  };
+
+  const handleSubtaskDrop = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    e.stopPropagation(); // Prevent bubbling to App container
+    if (!draggedSubtaskId || draggedSubtaskId === targetId || !selectedProjectId) return;
+
+    setProjects(prev => prev.map(p => {
+      if (p.id !== selectedProjectId) return p;
+      
+      const oldIndex = p.subtasks.findIndex(t => t.id === draggedSubtaskId);
+      const newIndex = p.subtasks.findIndex(t => t.id === targetId);
+      
+      if (oldIndex === -1 || newIndex === -1) return p;
+
+      const newSubtasks = [...p.subtasks];
+      const [movedItem] = newSubtasks.splice(oldIndex, 1);
+      newSubtasks.splice(newIndex, 0, movedItem);
+
+      return { ...p, subtasks: newSubtasks };
+    }));
+    
+    setDraggedSubtaskId(null);
+  };
+
+  // ----- App-wide Drag & Drop (File Import) Handlers -----
+  const handleAppDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Prevent overlay if we are dragging a subtask internally
+    if (draggedSubtaskId) return;
+    
+    // Only show if dragging files (check for 'Files' type)
+    // Note: Array.from is used to handle DOMStringList
+    if (e.dataTransfer.types && !Array.from(e.dataTransfer.types).includes("Files")) return;
+
+    if (!isDragOverApp) setIsDragOverApp(true);
+  };
+
+  const handleAppDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (draggedSubtaskId) return;
+    if (e.dataTransfer.types && !Array.from(e.dataTransfer.types).includes("Files")) return;
+
+    setIsDragOverApp(true);
+  };
+
+  const handleAppDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Only set to false if we are leaving the window/root container
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setIsDragOverApp(false);
+  };
+
+  const handleAppDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOverApp(false);
+    
+    const file = e.dataTransfer.files?.[0];
+    if (file && (file.type === 'application/json' || file.name.toLowerCase().endsWith('.json'))) {
+      importDataFromFile(file);
+    }
   };
 
   const activeColor = timerMode === TimerMode.POMODORO ? settings.colors.pomodoro : (timerMode === TimerMode.SHORT_BREAK ? settings.colors.shortBreak : settings.colors.longBreak);
@@ -483,7 +574,24 @@ const App: React.FC = () => {
   const selectClass = "w-full !bg-white !text-gray-900 border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-rose-500 outline-none transition-all";
 
   return (
-    <div className="min-h-screen transition-colors duration-500 ease-in-out font-sans flex flex-col md:flex-row text-white overflow-hidden relative" style={{ backgroundColor: activeColor }}>
+    <div 
+      className="min-h-screen transition-colors duration-500 ease-in-out font-sans flex flex-col md:flex-row text-white overflow-hidden relative" 
+      style={{ backgroundColor: activeColor }}
+      onDragOver={handleAppDragOver}
+      onDragEnter={handleAppDragEnter}
+      onDragLeave={handleAppDragLeave}
+      onDrop={handleAppDrop}
+    >
+      {/* File Import Overlay */}
+      {isDragOverApp && (
+        <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center pointer-events-none animate-fade-in">
+          <div className="bg-white/10 p-12 rounded-3xl border-4 border-dashed border-white/30 flex flex-col items-center gap-6">
+            <FileJson className="w-24 h-24 text-white/50" />
+            <div className="text-3xl font-bold text-white">Drop JSON file to Import</div>
+            <div className="text-white/60">Overwrite current data with file content</div>
+          </div>
+        </div>
+      )}
       
       {selectedProject && (
         <div className="fixed right-0 top-0 bottom-0 w-3 flex flex-col z-40 bg-black/10">
@@ -655,10 +763,26 @@ const App: React.FC = () => {
                       }
 
                       return (
-                        <div key={task.id} onClick={() => setActiveSubtaskId(task.id)} className={`relative p-4 rounded-xl border-l-8 cursor-pointer transition-all hover:brightness-110 ${isDone ? 'bg-emerald-500/20 border-emerald-400' : 'bg-rose-500/10 border-rose-300' } ${activeSubtaskId === task.id ? 'ring-2 ring-white ring-offset-2 ring-offset-transparent transform scale-[1.02] shadow-xl' : ''}`}>
+                        <div 
+                          key={task.id}
+                          draggable 
+                          onDragStart={(e) => handleSubtaskDragStart(e, task.id)}
+                          onDragOver={handleSubtaskDragOver}
+                          onDrop={(e) => handleSubtaskDrop(e, task.id)}
+                          onClick={() => setActiveSubtaskId(task.id)} 
+                          className={`relative p-4 rounded-xl border-l-8 cursor-pointer transition-all hover:brightness-110 group/task 
+                            ${isDone ? 'bg-emerald-500/20 border-emerald-400' : 'bg-rose-500/10 border-rose-300' } 
+                            ${activeSubtaskId === task.id ? 'ring-2 ring-white ring-offset-2 ring-offset-transparent transform scale-[1.02] shadow-xl' : ''}
+                            ${draggedSubtaskId === task.id ? 'opacity-50 cursor-move' : ''}
+                          `}
+                        >
                           <div className="flex flex-col gap-2">
                               <div className="flex justify-between items-center">
                                 <div className="flex items-center gap-2 overflow-hidden flex-1">
+                                  {/* Drag Handle */}
+                                  <div className="mr-1 cursor-grab active:cursor-grabbing text-white/30 hover:text-white/60">
+                                    <GripVertical className="w-4 h-4" />
+                                  </div>
                                   <span className={`font-medium text-lg truncate ${isDone ? 'line-through text-white/50 italic' : 'text-white'}`}>{task.name}</span>
                                   {task.description && (
                                     <button 
@@ -710,7 +834,6 @@ const App: React.FC = () => {
 
       {/* Settings Modal */}
       <Modal isOpen={isSettingsModalOpen} onClose={() => setIsSettingsModalOpen(false)} title="Settings">
-        {/* ... existing modal content ... */}
         <div className="space-y-6 text-gray-800">
            <div>
              <h3 className="text-gray-400 uppercase text-xs font-bold tracking-wider mb-3">Timer (minutes)</h3>
